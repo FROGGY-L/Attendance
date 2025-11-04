@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="stylesheet" href="inc/footer.css">
+    <link rel="stylesheet" href="attendance.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel Upload and Analyze</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+</head>
+<style>
+    .home-button {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        padding: 10px 15px;
+        background-color: #4CAF50;
+        color: white;
+        text-decoration: none;
+        border-radius: 5px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.3s ease;
+        z-index: 100;
+    }
+
+    .home-button:hover {
+        background-color: #3e8e41;
+        transform: scale(1.05);
+    }
+
+    .home-button i {
+        font-size: 18px;
+    }
+</style>
+<body>
+
+    <div class="container">
+    <a href="index.php" class="home-button">
+        <i class="fas fa-home"></i> Home
+    </a>
+        <img src="logo1.png" alt="logo" width="500" height="250" class="centered-image">
+        <h1>Employee Attendance Calculator</h1>
+
+        <button class="notice-button" onclick="showToastMessage()">Important Notice</button>
+        <!-- <button class="separate-button" onclick="openModal()">Department Separator</button> -->
+
+        <div class="file-input-container">
+    <input type="file" id="fileInput" accept=".xlsx, .xls">
+    <label class="file-input-label" for="fileInput">
+        <i class="fas fa-file-upload"></i> Choose a File
+    </label>
+    <span id="fileName">No file chosen</span>
+</div>
+        <div class="button-container">
+            <button class="calculate-button" onclick="processFile()">Calculate</button>
+            <button class="export-button" onclick="exportToExcel()">Export</button>
+            <button class="clear-button" onclick="clearFile()">Clear</button>
+
+        </div>
+
+        <div id="output"></div>
+    </div>
+
+    <link rel="stylesheet" href="footer.css">
+    <footer>
+        <div class="footer-content">
+            <div class="footer-left">
+                <p>&copy; <span id="current-year"></span> KFL Manpower Agency. All rights reserved. ©TeamFroggy</p>
+                <script>
+                    document.getElementById("current-year").textContent = new Date().getFullYear();
+                </script>
+            </div>
+            <div class="footer-right">
+                <ul>
+                    <li><a href="#" onclick="event.preventDefault(); showPrivacyPolicyToast()">Privacy Policy</a></li>
+                    <li><a href="#" onclick="event.preventDefault(); showTermsofServiceToast()">Terms of Service</a>
+                    </li>
+                    <li><a href="#" onclick="event.preventDefault(); showContactUSToast('Contact Us')">Contact Us</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-social">
+            <a href="#" class="social-icon"><i class="fab fa-facebook-f"></i></a>
+            <a href="#" class="social-icon"><i class="fab fa-twitter"></i></a>
+            <a href="#" class="social-icon"><i class="fab fa-google"></i></a>
+            <a href="#" class="social-icon"><i class="fab fa-linkedin-in"></i></a>
+        </div>
+    </footer>
+
+    <div id="toast" class="toast">
+        <div id="toast-message"></div>
+        <button class="close-btn" onclick="closeToast()">x</button>
+    </div>
+    <!-- Script footer -->
+    <script>
+        function showToast(message) {
+            const toast = document.getElementById("toast");
+            const toastMessage = document.getElementById("toast-message");
+
+            toastMessage.textContent = message;
+
+            toast.classList.add("show");
+
+            setTimeout(() => {
+                toast.classList.remove("show");
+            }, 5000);
+        }
+
+        function showPrivacyPolicyToast() {
+            const toast = document.getElementById("toast");
+            const toastMessage = document.getElementById("toast-message");
+
+            toastMessage.innerHTML = `
+                    <strong>Privacy Policy</strong><br>
+                    Effective Date: January 20, 2025<br><br>
+                    Welcome to Employee Attendance Calculator! Your privacy is very important to us. This Privacy Policy outlines the types of personal information we collect, how we use it, and the measures we take to protect your data.<br><br>
+
+                    <h4>Information We Collect</h4>
+                    We may collect the following types of information:
+                    <ul>
+                        <li>Personal identification information (e.g., name, email address, phone number)</li>
+                        <li>Browser and device information</li>
+                        <li>IP addresses and usage data</li>
+                    </ul>
+                    <h4>How We Use Your Information</h4>
+                    We use the information we collect for the following purposes:
+                    <ul>
+                        <li>To provide and maintain our service</li>
+                        <li>To communicate with you, including customer support</li>
+                        <li>To improve our website and services</li>
+                        <li>To comply with legal obligations</li>
+                    </ul>
+                    <h4>Cookies and Tracking Technologies</h4>
+                    Our website may use cookies and similar tracking technologies to enhance your experience. You can choose to disable cookies in your browser settings.<br><br>
+
+                    <h4>Sharing Your Information</h4>
+                    We do not sell or share your personal data with third parties, except as necessary to provide our services or comply with legal requirements.<br><br>
+
+                    <h4>Data Security</h4>
+                    We take appropriate measures to protect your data from unauthorized access, alteration, disclosure, or destruction.<br><br>
+
+                    <h4>Your Rights</h4>
+                    Depending on your location, you may have the following rights regarding your personal data:
+                    <ul>
+                        <li>The right to access, update, or delete your data</li>
+                        <li>The right to object to data processing</li>
+                        <li>The right to withdraw consent</li>
+                    </ul><br>
+
+                    <h4>Contact Us</h4>
+                   If you have any questions about this Privacy Policy, please contact us at <a href="mailto:admin@kflmanpoweragency.com" style="color: lightblue;">admin@kflmanpoweragency.com</a>.
+                `;
+
+            // Show the toast
+            toast.classList.add("show");
+        }
+
+        function showTermsofServiceToast() {
+            const toast = document.getElementById("toast");
+            const toastMessage = document.getElementById("toast-message");
+
+            toastMessage.innerHTML = `
+                <strong>Terms of Service</strong><br>
+                Effective Date: January 20, 2025<br><br>
+                Welcome to Employee Attendance Calculator! These Terms of Service ("Terms") govern your access to and use of our website and services. By using our services, you agree to comply with and be bound by these Terms.<br><br>
+
+                <h4>Use of Service</h4>
+                You agree to use our services only for lawful purposes and in a manner consistent with all applicable laws and regulations.<br><br>
+
+                <h4>Prohibited Activities</h4>
+                When using our services, you agree not to:
+                <ul>
+                    <li>Engage in any illegal activities</li>
+                    <li>Transmit harmful or malicious content</li>
+                    <li>Attempt to gain unauthorized access to our systems</li>
+                    <li>Impersonate another user or entity</li>
+                </ul><br>
+
+                <h4>Intellectual Property</h4>
+                All content, trademarks, and intellectual property displayed on our website are owned by or licensed to KFL Manpower Agency. You may not reproduce, distribute, or modify any part of our website without prior written permission.<br><br>
+
+                <h4>Disclaimer of Warranties</h4>
+                Our services are provided "as is" without any warranties, express or implied, including but not limited to implied warranties of merchantability and fitness for a particular purpose.<br><br>
+
+                <h4>Limitation of Liability</h4>
+                KFL Manpower Agency will not be liable for any indirect, incidental, or consequential damages arising from your use of our services.<br><br>
+
+                <h4>Termination</h4>
+                We reserve the right to terminate or suspend your access to our services at any time for any reason, including but not limited to a breach of these Terms.<br><br>
+
+                <h4>Changes to These Terms</h4>
+                We may update these Terms from time to time. We will notify you of any changes by posting the updated Terms on our website.<br><br>
+
+                <h4>Contact Us</h4>
+                If you have any questions about these Terms, please contact us at <a href="mailto:admin@kflmanpoweragency.com" style="color: lightblue;">admin@kflmanpoweragency.com</a>.
+                `;
+
+            // Show the toast
+            toast.classList.add("show");
+        }
+
+        function closeToast() {
+            const toast = document.getElementById("toast");
+            toast.classList.remove("show");
+        }
+
+    </script>
+    <script src="attendance.js"></script>
+</body>
+
+</html>
