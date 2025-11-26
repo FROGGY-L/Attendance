@@ -25,58 +25,78 @@ function processFile() {
     const file = fileInput.files[0];
 
     if (!file) {
-        showToast('Please select an Excel file.');
+        showToast('Please select a file.');
         return;
     }
 
     const reader = new FileReader();
-    reader.onload = (e) => {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-
-        // Assuming the first sheet contains the data
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-
-        // Read the first row of the sheet to check the content
-        const firstRow = XLSX.utils.sheet_to_json(worksheet, { range: 0, header: 1 })[0];
-
-        // Check if the first row contains "KFL Manpower Agency"
-        function handleFileUpload(file) {
-            const reader = new FileReader();
-
-            reader.onload = function (event) {
-                const text = event.target.result;
-                const rows = text.split("\n").map(row => row.split(",")); // Splitting into rows and columns
-
-                if (rows.length < 3) {
-                    showToast("Not enough rows in the file.");
-                    return;
+    
+    // Check file extension to determine processing method
+    const fileName = file.name.toLowerCase();
+    
+    if (fileName.endsWith('.csv')) {
+        // Handle CSV files
+        reader.onload = (e) => {
+            const text = e.target.result;
+            const lines = text.split('\n');
+            
+            // Validate KFL file format
+            if (lines.length < 6 || !lines[0].includes('KFL MANPOWER AGENCY')) {
+                showToast('This is not a valid KFL Attendance file.');
+                return;
+            }
+            
+            // Find header row (should contain ID,Name,Department...)
+            let headerRowIndex = -1;
+            for (let i = 0; i < Math.min(10, lines.length); i++) {
+                if (lines[i].includes('ID,Name,Department')) {
+                    headerRowIndex = i;
+                    break;
                 }
-
-                // Checking first three rows for "KFL Manpower Agency" in the fourth column (index 3)
-                const isValid = rows.slice(0, 3).every(row => row[3] === "KFL Manpower Agency");
-
-                if (!isValid) {
-                    showToast("This is not a valid KFL Attendance file.");
-                    return;
+            }
+            
+            if (headerRowIndex === -1) {
+                showToast('Could not find data header in the file.');
+                return;
+            }
+            
+            // Parse CSV data
+            const headers = lines[headerRowIndex].split(',');
+            const jsonData = [];
+            
+            for (let i = headerRowIndex + 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (line) {
+                    const values = line.split(',');
+                    const record = {};
+                    headers.forEach((header, index) => {
+                        record[header.trim()] = values[index] ? values[index].trim() : '';
+                    });
+                    if (record.ID && record.Name) {
+                        jsonData.push(record);
+                    }
                 }
-
-                console.log("Valid KFL Attendance file");
-            };
-
-            reader.readAsText(file);
-        }
-
-
-        // Convert the worksheet to JSON, starting from row 8
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { range: 7 }); // 0-based index, row 8 is index 7
-
-        analyzeData(jsonData);
-    };
-    // toast if file is not valid
-    reader.readAsArrayBuffer(file);
-                }
+            }
+            
+            analyzeData(jsonData);
+        };
+        reader.readAsText(file);
+    } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        // Handle Excel files
+        reader.onload = (e) => {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { range: 7 });
+            analyzeData(jsonData);
+        };
+        reader.readAsArrayBuffer(file);
+    } else {
+        showToast('Please select a CSV or Excel file.');
+        return;
+    }
+}
                 function showToast(message) {
         const toast = document.createElement('div');
         toast.className = 'toastfile';
@@ -147,15 +167,45 @@ function processFile() {
         if (!dateStr || !timeStr) return null;
         
         try {
-            // Parse date in DD-MM-YYYY format
-            const [day, month, year] = dateStr.split('-').map(Number);
+            // Handle different date formats
+            let day, month, year;
+            
+            if (dateStr.includes('-')) {
+                // DD-MM-YYYY format
+                const parts = dateStr.split('-');
+                if (parts.length === 3) {
+                    day = parseInt(parts[0]);
+                    month = parseInt(parts[1]);
+                    year = parseInt(parts[2]);
+                }
+            } else if (dateStr.includes('/')) {
+                // MM/DD/YYYY or DD/MM/YYYY format
+                const parts = dateStr.split('/');
+                if (parts.length === 3) {
+                    day = parseInt(parts[0]);
+                    month = parseInt(parts[1]);
+                    year = parseInt(parts[2]);
+                }
+            }
             
             // Parse time in HH:mm format
-            const [hours, minutes] = timeStr.split(':').map(Number);
+            const timeParts = timeStr.split(':');
+            if (timeParts.length < 2) {
+                console.warn(`Invalid time format: ${timeStr}`);
+                return null;
+            }
+            
+            const hours = parseInt(timeParts[0]);
+            const minutes = parseInt(timeParts[1]);
             
             // Validate all components
             if (isNaN(year) || isNaN(month) || isNaN(day) || 
-                isNaN(hours) || isNaN(minutes)) {
+                isNaN(hours) || isNaN(minutes) ||
+                year < 2000 || year > 2100 ||
+                month < 1 || month > 12 ||
+                day < 1 || day > 31 ||
+                hours < 0 || hours > 23 ||
+                minutes < 0 || minutes > 59) {
                 console.warn(`Invalid date/time components: ${dateStr} ${timeStr}`);
                 return null;
             }
@@ -191,10 +241,15 @@ function processFile() {
             const name = record['Name'];
             const department = record['Department'];
             const date = record['Date'];
-            const time = record['Time'] || record['Check-In Time'];
-            const dateTime = combineDateTime(date, time);
+            const time = record['Check-In Time'] || record['Time'];
             const type = record['Card Swiping Type'];
-    
+            
+            // Skip empty records
+            if (!id || !name || !date || !time || !type) {
+                return;
+            }
+            
+            const dateTime = combineDateTime(date, time);
             if (!dateTime) {
                 console.warn(`⛔ Skipping invalid datetime: ${date} ${time}`);
                 return;
@@ -226,6 +281,7 @@ function processFile() {
         });
     
         let reusedCheckOuts = new Set();
+        let nightShiftCheckouts = new Map(); // Track which checkouts belong to night shifts
     
         for (let i = 0; i < sortedKeys.length; i++) {
             const key = sortedKeys[i];
@@ -243,30 +299,53 @@ function processFile() {
             const firstCheckIn = checkIns.length > 0 ? checkIns.reduce((a, b) => a.dateTime < b.dateTime ? a : b) : null;
             let lastCheckOut = checkOuts.length > 0 ? checkOuts.reduce((a, b) => (a.dateTime > b.dateTime ? a : b)) : null;
             let remarks = 'Normal';
-    
-            // Check for missing check-in
+            
+            // If no check-in but has check-out, this might be a checkout from previous night shift
             if (!firstCheckIn && checkOuts.length > 0) {
-                // This is a case where there are check-outs but no check-ins
-                const earliestCheckOut = checkOuts.reduce((a, b) => a.dateTime < b.dateTime ? a : b);
-                
-                results.push({
-                    Employee: name,
-                    Department: department,
-                    Status: 'Missing Check In',
-                    Duration: '-',
-                    Date: date,
-                    CheckIn: '-',
-                    CheckOut: earliestCheckOut.time,
-                    BreakIn1: '-',
-                    BreakOut1: '-',
-                    BreakIn2: '-',
-                    BreakOut2: '-',
-                    BreakIn3: '-',
-                    BreakOut3: '-',
-                    Remarks: 'Check In Missing'
-                });
-                continue; // Skip to next record
+                // Check if this checkout belongs to a previous night shift
+                const checkoutKey = `${id}_${checkOuts[0].dateTime.getTime()}`;
+                if (nightShiftCheckouts.has(checkoutKey)) {
+                    // This checkout is already claimed by a previous night shift
+                    results.push({
+                        Employee: name,
+                        Department: department,
+                        Status: 'Absent',
+                        Duration: '-',
+                        Date: date,
+                        CheckIn: '-',
+                        CheckOut: '-',
+                        BreakIn1: '-',
+                        BreakOut1: '-',
+                        BreakIn2: '-',
+                        BreakOut2: '-',
+                        BreakIn3: '-',
+                        BreakOut3: '-',
+                        Remarks: 'No attendance record'
+                    });
+                    continue;
+                } else {
+                    // This is an orphaned checkout
+                    results.push({
+                        Employee: name,
+                        Department: department,
+                        Status: 'Missing Check In',
+                        Duration: '-',
+                        Date: date,
+                        CheckIn: '-',
+                        CheckOut: checkOuts[0].time,
+                        BreakIn1: '-',
+                        BreakOut1: '-',
+                        BreakIn2: '-',
+                        BreakOut2: '-',
+                        BreakIn3: '-',
+                        BreakOut3: '-',
+                        Remarks: 'Check In Missing'
+                    });
+                    continue;
+                }
             }
+    
+
     
             if (!firstCheckIn) continue; // Skip if no check-in and no check-out
     
@@ -280,27 +359,26 @@ function processFile() {
                 const outTime = lastCheckOut.dateTime;
                 console.log("🔍 Raw outTime:", outTime);
     
-                // Attempt to parse the outTime
-                let parsedOutTime = new Date(outTime);
+                if (outTime instanceof Date && !isNaN(outTime.getTime())) {
+                    const diff = (outTime - checkInDateTime) / (1000 * 60 * 60);
+                    console.log(`   ⏱️ Same-day checkout at ${outTime.toTimeString()} → diff = ${diff.toFixed(2)} hrs`);
     
-                // Check if parsing failed
-                if (isNaN(parsedOutTime.getTime())) {
-                    console.warn(`❌ Invalid outTime for ${name} on ${date}:`, outTime);
-                } else {
-                    const diff = (parsedOutTime - checkInDateTime) / (1000 * 60 * 60);
-                    console.log(`   ⏱️ Trying out at ${outTime} → diff = ${diff.toFixed(2)} hrs`);
-    
-                    // Logic for checking time difference
-                    if (diff <= 0 || diff > 16) {
-                        lastCheckOut = null;
-                    } else {
+                    // Allow reasonable same-day work durations (1-16 hours)
+                    if (diff > 1 && diff <= 16) {
                         reusedCheckOuts.add(outTime);
+                        remarks = 'Same-day shift';
+                    } else {
+                        console.log(`⚠️ Invalid same-day duration: ${diff.toFixed(2)} hours`);
+                        lastCheckOut = null;
                     }
+                } else {
+                    console.warn(`❌ Invalid outTime for ${name} on ${date}:`, outTime);
+                    lastCheckOut = null;
                 }
             }
     
-            // 🔁 Try next-day checkout if night shift and no same-day checkout found
-            if (!lastCheckOut && shiftType === 'Night Shift') {
+            // 🔁 Try next-day checkout if no same-day checkout found
+            if (!lastCheckOut) {
                 console.log(`🕒 Looking for next-day checkout for ${name} on ${date}...`);
     
                 // Helper: Get next date in DD-MM-YYYY format
@@ -323,8 +401,10 @@ function processFile() {
                         r.type === 'Check Out' && !reusedCheckOuts.has(r.dateTime)
                     );
     
+                    // Sort by time to get the earliest checkout
+                    possibleOuts.sort((a, b) => a.dateTime - b.dateTime);
+    
                     for (const r of possibleOuts) {
-                        // r.dateTime is already a Date object, no need to parse
                         const outTime = r.dateTime;
                         
                         if (!(outTime instanceof Date) || isNaN(outTime.getTime())) {
@@ -335,16 +415,31 @@ function processFile() {
                         const diffHours = (outTime - checkInDateTime) / (1000 * 60 * 60);
                         console.log(`   ⏱️ Trying out at ${outTime.toString()} → diff = ${diffHours.toFixed(2)} hrs`);
     
-                        if (diffHours > 0 && diffHours <= 14) {
+                        // Allow reasonable work durations (4-16 hours)
+                        if (diffHours > 4 && diffHours <= 16) {
+                            // Check if next day has check-in records (indicating employee was present)
+                            const nextDayCheckIns = nextGroup.records.filter(rec => rec.type === 'Check In');
+                            
+                            if (nextDayCheckIns.length > 0) {
+                                // Employee has check-in on next day, so this checkout cannot be used
+                                console.log(`⚠️ Cannot use checkout from ${nextGroup.date} - employee has check-in on that day`);
+                                continue;
+                            }
+                            
                             lastCheckOut = r;
                             reusedCheckOuts.add(r.dateTime);
-                            remarks = `Reused check-out from ${nextGroup.date}`;
+                            
+                            // Mark this checkout as belonging to current night shift
+                            const checkoutKey = `${id}_${r.dateTime.getTime()}`;
+                            nightShiftCheckouts.set(checkoutKey, date);
+                            
+                            remarks = shiftType === 'Night Shift' ? `Next-day checkout from ${nextGroup.date}` : `Extended shift to ${nextGroup.date}`;
                             console.log(`✅ Found valid next-day check-out: ${outTime.toString()}`);
                             break;
                         }
                     }
                 } else {
-                    console.log(`📭 No next-day record group found for ${nextKey}`);
+                    console.log(`📝 No next-day record group found for ${nextKey}`);
                 }
     
                 if (!lastCheckOut) {
