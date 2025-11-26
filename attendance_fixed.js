@@ -216,7 +216,7 @@ function showToastMessage() {
     - Fixed night shift and morning shift also added mid shift for calculating. Also reduced time on Important Notice.<br>
     <strong>Update 04-30-2025:</strong><br>
     - Added missing checkin. <br>
-    <strong>Update 01-20-2025:</strong><br>
+    <strong>Update 11-26-2025:</strong><br>
     - Enhanced UI with modern green-blue gradient design and improved mobile responsiveness.<br>
     - Redesigned layout with compact mode for better data visibility.<br>
     - Added proper modal dialogs for footer links and improved scrolling behavior.<br>
