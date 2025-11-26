@@ -127,6 +127,18 @@ function processFile() {
                 const workbook = XLSX.read(data, { type: 'array' });
                 const sheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[sheetName];
+                
+                // Check for KFL MANPOWER AGENCY SERVER 3 in cells A1-A3
+                const a1 = worksheet['A1'] ? worksheet['A1'].v : '';
+                const a2 = worksheet['A2'] ? worksheet['A2'].v : '';
+                const a3 = worksheet['A3'] ? worksheet['A3'].v : '';
+                
+                const headerText = `${a1}${a2}${a3}`.toUpperCase();
+                if (!headerText.includes('KFL MANPOWER AGENCY SERVER 3')) {
+                    showToast('❌ Invalid file format. Please upload a valid KFL attendance file.');
+                    return;
+                }
+                
                 const jsonData = XLSX.utils.sheet_to_json(worksheet, { range: 7 });
                 console.log('Excel data parsed, rows:', jsonData.length);
                 analyzeData(jsonData);
