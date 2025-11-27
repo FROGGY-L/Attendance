@@ -139,8 +139,18 @@ function processFile() {
                     return;
                 }
                 
+                // Extract operator from A6
+                const operatorCell = worksheet['A6'] ? worksheet['A6'].v : '';
+                const operatorMatch = operatorCell.match(/Operator:\s*(.+)/);
+                const operator = operatorMatch ? operatorMatch[1].trim() : operatorCell;
+                window.currentOperator = "Operator:" + " " + operator;
+                
                 const jsonData = XLSX.utils.sheet_to_json(worksheet, { range: 7 });
                 console.log('Excel data parsed, rows:', jsonData.length);
+                
+                // Store original worksheet for export
+                window.originalWorksheet = worksheet;
+                
                 analyzeData(jsonData);
                 showToast('✅ Attendance data calculated successfully!');
             } catch (error) {
@@ -215,12 +225,17 @@ function showToastMessage() {
     <strong>Update 04-24-2025:</strong><br>
     - Fixed night shift and morning shift also added mid shift for calculating. Also reduced time on Important Notice.<br>
     <strong>Update 04-30-2025:</strong><br>
-    - Added missing checkin. <br>
+    - Added missing checkin.<br>
     <strong>Update 11-26-2025:</strong><br>
     - Enhanced UI with modern green-blue gradient design and improved mobile responsiveness.<br>
     - Redesigned layout with compact mode for better data visibility.<br>
     - Added proper modal dialogs for footer links and improved scrolling behavior.<br>
     - Optimized button alignment and file input positioning for better user experience.<br>
+    <strong>Update 11-27-2025:</strong><br>
+    - Added file validation to ensure only valid KFL attendance files are processed.<br>
+    - Enhanced Excel export with multiple sheets: Attendance Pivot, Attendance Data, and Original Data.<br>
+    - Implemented operator extraction from uploaded files and included in export headers.<br>
+    - Added professional formatting with merged cells and auto-fit columns for better readability.<br>
     <strong>* Always double-check the data.</strong><br><br>
     For any inquiries, feel free to contact IT Personnel.<br><br>
     <strong>Thank you!</strong>
@@ -578,7 +593,7 @@ function analyzeData(data) {
                     Duration: '-',
                     Date: record.date,
                     CheckIn: record.time,
-                    CheckOut: 'Missing',
+                    CheckOut: '-',
                     Remarks: 'Missing checkout - no additional records'
                 });
             }
@@ -723,12 +738,14 @@ function exportToExcel() {
     const currentDate = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
     const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
+    const operator = window.currentOperator || '';
+    
     // Create header data with centered company name using spaces
     const headerData = [
         ['                                                                                                                              KFL MANPOWER AGENCY SERVER 3                    '],
         [''],
         [''],
-        ['Transaction'],
+        [operator],
         [`Export Time: ${currentDate} ${currentTime}`],
         [`Time Period: ${minDate} - ${maxDate}`],
         ['']
@@ -753,6 +770,55 @@ function exportToExcel() {
     });
 
     const wb = XLSX.utils.book_new();
+    
+    // Create Attendance Pivot sheet first
+    const attendanceData = [
+        ['KFL MANPOWER AGENCY SERVER 3'],
+        [''],
+        [''],
+        [operator],
+        [`Export Time: ${currentDate} ${currentTime}`],
+        [`Time Period: ${minDate} - ${maxDate}`],
+        [''],
+        ['Employee',]
+    ];
+
+    const employeeSummary = {};
+    results.forEach(result => {
+        if (!employeeSummary[result.Employee]) {
+            employeeSummary[result.Employee] = [];
+        }
+        employeeSummary[result.Employee].push({
+            Date: result.Date,
+            CheckIn: result.CheckIn,
+            CheckOut: result.CheckOut
+        });
+    });
+
+    Object.entries(employeeSummary).forEach(([employee, records]) => {
+        const sortedRecords = records.sort((a, b) => {
+            const [dayA, monthA, yearA] = a.Date.split('-').map(Number);
+            const [dayB, monthB, yearB] = b.Date.split('-').map(Number);
+            return new Date(yearA, monthA - 1, dayA) - new Date(yearB, monthB - 1, dayB);
+        });
+        
+        attendanceData.push([employee, 'CheckIn', 'CheckOut']);
+        sortedRecords.forEach(record => {
+            attendanceData.push([record.Date, record.CheckIn, record.CheckOut]);
+        });
+        attendanceData.push(['', '', '']);
+    });
+
+    const attendanceWs = XLSX.utils.aoa_to_sheet(attendanceData);
+    attendanceWs['!cols'] = [{ wch: 20 }, { wch: 12 }, { wch: 12 }];
+    
+    // Merge A1:C3 for company name
+    attendanceWs['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 2, c: 2 } }];
+    
+    wb.SheetNames.push('Attendance Pivot');
+    wb.Sheets['Attendance Pivot'] = attendanceWs;
+    
+    // Create Attendance Data sheet
     const ws = XLSX.utils.aoa_to_sheet(headerData);
     XLSX.utils.sheet_add_json(ws, results, { origin: 'A8' });
     
@@ -807,6 +873,24 @@ function exportToExcel() {
     
     wb.SheetNames.push('Attendance Data');
     wb.Sheets['Attendance Data'] = ws;
+
+    // Create Original Data sheet
+    if (window.originalWorksheet) {
+        const originalWs = { ...window.originalWorksheet };
+        
+        // Auto-fit columns based on content
+        originalWs['!cols'] = [
+            { wch: 5 },   // ID
+            { wch: 25 },  // Name
+            { wch: 30 },  // Department
+            { wch: 12 },  // Date
+            { wch: 12 },  // Check-In Time
+            { wch: 20 }   // Card Swiping Type
+        ];
+        
+        wb.SheetNames.push('Original Data');
+        wb.Sheets['Original Data'] = originalWs;
+    }
 
     XLSX.writeFile(wb, 'attendance_data.xlsx');
     showToast('📊 Data exported to Excel successfully!');
