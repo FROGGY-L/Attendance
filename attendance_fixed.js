@@ -236,6 +236,12 @@ function showToastMessage() {
     - Enhanced Excel export with multiple sheets: Attendance Pivot, Attendance Data, and Original Data.<br>
     - Implemented operator extraction from uploaded files and included in export headers.<br>
     - Added professional formatting with merged cells and auto-fit columns for better readability.<br>
+    <strong>Update 12-01-2025:</strong><br>
+    - Added comprehensive break time tracking for SANTEH department employees.<br>
+    - Implemented dynamic break detection supporting unlimited break periods (1st, 2nd, 3rd, etc.).<br>
+    - Enhanced table display with separate columns for each break in/out time for SANTEH employees.<br>
+    - Updated Attendance Pivot sheet to show detailed break sequences for SANTEH department.<br>
+    - Improved data mapping to ensure break times display correctly in both main table and pivot sheet.<br>
     <strong>* Always double-check the data.</strong><br><br>
     For any inquiries, feel free to contact IT Personnel.<br><br>
     <strong>Thank you!</strong>
@@ -430,7 +436,9 @@ function analyzeData(data) {
         // Normalize type to handle case variations
         const lowerType = type.toLowerCase().trim();
         const normalizedType = lowerType.includes('check out') || lowerType.includes('checkout') ? 'Check Out' : 
-                              lowerType.includes('check in') || lowerType.includes('checkin') ? 'Check In' : type;
+                              lowerType.includes('check in') || lowerType.includes('checkin') ? 'Check In' :
+                              lowerType.includes('break in') ? 'Break In' :
+                              lowerType.includes('break out') ? 'Break Out' : type;
 
         if (!employeeRecords[id]) {
             employeeRecords[id] = {
@@ -477,6 +485,9 @@ function analyzeData(data) {
         emp.records.forEach((r, idx) => {
             console.log(`  Record ${idx}: ${r.date} ${r.time} ${r.type}`);
         });
+        
+        // Check if employee is in SANTEH department
+        const isSantehEmployee = emp.department && emp.department.toUpperCase().includes('SANTEH');
         
         // Process all records chronologically to find valid shifts
         for (let i = 0; i < emp.records.length; i++) {
@@ -554,6 +565,40 @@ function analyzeData(data) {
                 usedRecords.add(i);
                 usedRecords.add(checkoutIndex);
                 
+                // Calculate break times for SANTEH employees
+                let checkIn = record.time;
+                let checkOut = checkout.time;
+                let breakTimes = {};
+                
+                if (isSantehEmployee) {
+                    // Find break records between check-in and check-out
+                    const breakRecords = [];
+                    for (let k = i + 1; k < checkoutIndex; k++) {
+                        const breakRecord = emp.records[k];
+                        if (breakRecord.type === 'Break In' || breakRecord.type === 'Break Out') {
+                            breakRecords.push(breakRecord);
+                        }
+                    }
+                    
+                    // Sort break records by time
+                    breakRecords.sort((a, b) => a.dateTime - b.dateTime);
+                    
+                    // Assign break times dynamically
+                    let breakPairIndex = 1;
+                    for (let b = 0; b < breakRecords.length - 1; b++) {
+                        if (breakRecords[b].type === 'Break In' && breakRecords[b + 1].type === 'Break Out') {
+                            breakTimes[`BreakIn${breakPairIndex}`] = breakRecords[b].time;
+                            breakTimes[`BreakOut${breakPairIndex}`] = breakRecords[b + 1].time;
+                            breakPairIndex++;
+                            b++; // Skip the break out since we already processed it
+                        }
+                    }
+                    
+                    // Store max breaks found for this employee
+                    if (!window.maxBreaksFound) window.maxBreaksFound = 0;
+                    window.maxBreaksFound = Math.max(window.maxBreaksFound, breakPairIndex - 1);
+                }
+                
                 // Determine shift type based on check-in time (not checkout time)
                 let shiftType = '';
                 let finalRemarks = remarks;
@@ -590,7 +635,7 @@ function analyzeData(data) {
                     }
                 }
                 
-                results.push({
+                const resultRecord = {
                     Employee: emp.name,
                     Department: emp.department,
                     Status: shiftType,
@@ -599,7 +644,21 @@ function analyzeData(data) {
                     CheckIn: record.time,
                     CheckOut: checkout.time,
                     Remarks: finalRemarks
-                });
+                };
+                
+                // Add break columns for SANTEH employees
+                if (isSantehEmployee) {
+                    resultRecord.CheckIn = checkIn;
+                    resultRecord.CheckOut = checkOut;
+                    
+                    // Add all break times found
+                    for (let i = 1; i <= (window.maxBreaksFound || 2); i++) {
+                        resultRecord[`BreakIn${i}`] = breakTimes[`BreakIn${i}`] || '-';
+                        resultRecord[`BreakOut${i}`] = breakTimes[`BreakOut${i}`] || '-';
+                    }
+                }
+                
+                results.push(resultRecord);
                 
                 // Mark this date as processed
                 processedDates.add(record.date);
@@ -697,7 +756,24 @@ function displayResults(results) {
     const table = document.createElement('table');
     const headerRow = document.createElement('tr');
 
-    const headers = ['Employee', 'Department', 'Status', 'Hours Rendered', 'Date', 'CheckIn', 'CheckOut', 'Remarks'];
+    // Check if any employee is from SANTEH department
+    const hasSantehEmployees = results.some(result => 
+        result.Department && result.Department.toUpperCase().includes('SANTEH')
+    );
+    
+    // Build dynamic headers for SANTEH employees
+    let headers;
+    if (hasSantehEmployees) {
+        headers = ['Employee', 'Department', 'Status', 'Hours Rendered', 'Date', 'Check In'];
+        const maxBreaks = window.maxBreaksFound || 2;
+        for (let i = 1; i <= maxBreaks; i++) {
+            headers.push(`${i}${i === 1 ? 'st' : i === 2 ? 'nd' : i === 3 ? 'rd' : 'th'} Break In`);
+            headers.push(`${i}${i === 1 ? 'st' : i === 2 ? 'nd' : i === 3 ? 'rd' : 'th'} Break Out`);
+        }
+        headers.push('Check Out', 'Remarks');
+    } else {
+        headers = ['Employee', 'Department', 'Status', 'Hours Rendered', 'Date', 'CheckIn', 'CheckOut', 'Remarks'];
+    }
 
     headers.forEach(header => {
         const th = document.createElement('th');
@@ -710,11 +786,26 @@ function displayResults(results) {
     results.forEach(result => {
         const row = document.createElement('tr');
 
-        ['Employee', 'Department', 'Status', 'Duration', 'Date', 'CheckIn', 'CheckOut'].forEach(key => {
-            const td = document.createElement('td');
-            td.textContent = result[key] || '-';
-            row.appendChild(td);
-        });
+        if (hasSantehEmployees) {
+            const keys = ['Employee', 'Department', 'Status', 'Duration', 'Date', 'CheckIn'];
+            const maxBreaks = window.maxBreaksFound || 2;
+            for (let i = 1; i <= maxBreaks; i++) {
+                keys.push(`BreakIn${i}`, `BreakOut${i}`);
+            }
+            keys.push('CheckOut');
+            
+            keys.forEach(key => {
+                const td = document.createElement('td');
+                td.textContent = result[key] || '-';
+                row.appendChild(td);
+            });
+        } else {
+            ['Employee', 'Department', 'Status', 'Duration', 'Date', 'CheckIn', 'CheckOut'].forEach(key => {
+                const td = document.createElement('td');
+                td.textContent = result[key] || '-';
+                row.appendChild(td);
+            });
+        }
 
         const remarksCell = document.createElement('td');
         remarksCell.textContent = result.Remarks || 'Normal';
@@ -739,6 +830,9 @@ function exportToExcel() {
     const results = [];
     const headers = Array.from(table.querySelectorAll('th')).map(th => th.textContent);
     const rows = table.querySelectorAll('tr');
+    
+    // Check if break columns are present
+    const hasBreakColumns = headers.some(h => h.includes('Break In'));
 
     // Get date range from results
     const dates = [];
@@ -804,40 +898,77 @@ function exportToExcel() {
         [`Export Time: ${currentDate} ${currentTime}`],
         [`Time Period: ${minDate} - ${maxDate}`],
         [''],
-        ['Employee',]
+        ['Employee']
     ];
 
     const employeeSummary = {};
     results.forEach(result => {
         if (!employeeSummary[result.Employee]) {
-            employeeSummary[result.Employee] = [];
+            employeeSummary[result.Employee] = {
+                records: [],
+                isSanteh: result.Department && result.Department.toUpperCase().includes('SANTEH')
+            };
         }
-        employeeSummary[result.Employee].push({
-            Date: result.Date,
-            CheckIn: result.CheckIn,
-            CheckOut: result.CheckOut
-        });
+        
+        const recordData = { Date: result.Date };
+        
+        if (employeeSummary[result.Employee].isSanteh) {
+            recordData.CheckIn = result.CheckIn || result['Check In'] || '-';
+            recordData.CheckOut = result.CheckOut || result['Check Out'] || '-';
+            
+            const maxBreaks = window.maxBreaksFound || 2;
+            for (let i = 1; i <= maxBreaks; i++) {
+                const ordinal = i === 1 ? '1st' : i === 2 ? '2nd' : i === 3 ? '3rd' : `${i}th`;
+                recordData[`BreakIn${i}`] = result[`BreakIn${i}`] || result[`${ordinal} Break In`] || '-';
+                recordData[`BreakOut${i}`] = result[`BreakOut${i}`] || result[`${ordinal} Break Out`] || '-';
+            }
+        } else {
+            recordData.CheckIn = result.CheckIn || result['Check In'] || '-';
+            recordData.CheckOut = result.CheckOut || result['Check Out'] || '-';
+        }
+        
+        employeeSummary[result.Employee].records.push(recordData);
     });
 
-    Object.entries(employeeSummary).forEach(([employee, records]) => {
-        const sortedRecords = records.sort((a, b) => {
+    Object.entries(employeeSummary).forEach(([employee, empData]) => {
+        const sortedRecords = empData.records.sort((a, b) => {
             const [dayA, monthA, yearA] = a.Date.split('-').map(Number);
             const [dayB, monthB, yearB] = b.Date.split('-').map(Number);
             return new Date(yearA, monthA - 1, dayA) - new Date(yearB, monthB - 1, dayB);
         });
         
-        attendanceData.push([employee, 'CheckIn', 'CheckOut']);
-        sortedRecords.forEach(record => {
-            attendanceData.push([record.Date, record.CheckIn, record.CheckOut]);
-        });
-        attendanceData.push(['', '', '']);
+        if (empData.isSanteh) {
+            const headerRow = [employee, 'Check In'];
+            const maxBreaks = window.maxBreaksFound || 2;
+            for (let i = 1; i <= maxBreaks; i++) {
+                headerRow.push(`${i}${i === 1 ? 'st' : i === 2 ? 'nd' : i === 3 ? 'rd' : 'th'} Break In`);
+                headerRow.push(`${i}${i === 1 ? 'st' : i === 2 ? 'nd' : i === 3 ? 'rd' : 'th'} Break Out`);
+            }
+            headerRow.push('Check Out');
+            attendanceData.push(headerRow);
+            
+            sortedRecords.forEach(record => {
+                const dataRow = [record.Date, record.CheckIn];
+                for (let i = 1; i <= maxBreaks; i++) {
+                    dataRow.push(record[`BreakIn${i}`] || '-', record[`BreakOut${i}`] || '-');
+                }
+                dataRow.push(record.CheckOut);
+                attendanceData.push(dataRow);
+            });
+        } else {
+            attendanceData.push([employee, 'CheckIn', 'CheckOut']);
+            sortedRecords.forEach(record => {
+                attendanceData.push([record.Date, record.CheckIn, record.CheckOut]);
+            });
+        }
+        attendanceData.push(['', '', '', '', '', '', '']);
     });
 
     const attendanceWs = XLSX.utils.aoa_to_sheet(attendanceData);
-    attendanceWs['!cols'] = [{ wch: 20 }, { wch: 12 }, { wch: 12 }];
+    attendanceWs['!cols'] = [{ wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
     
-    // Merge A1:C3 for company name
-    attendanceWs['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 2, c: 2 } }];
+    // Merge A1:G3 for company name
+    attendanceWs['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 2, c: 6 } }];
     
     wb.SheetNames.push('Attendance Pivot');
     wb.Sheets['Attendance Pivot'] = attendanceWs;
@@ -847,7 +978,7 @@ function exportToExcel() {
     XLSX.utils.sheet_add_json(ws, results, { origin: 'A8' });
     
     // Set column widths with text wrapping
-    ws['!cols'] = [
+    const columnWidths = [
         { wch: 25, wrapText: true }, // Employee
         { wch: 50, wrapText: true }, // Department
         { wch: 15 }, // Status
@@ -857,8 +988,21 @@ function exportToExcel() {
         { wch: 10 }  // CheckOut
     ];
     
-    // Merge A1:G3 and add border
-    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 2, c: 6 } }];
+    if (hasBreakColumns) {
+        columnWidths.push({ wch: 10 }); // Check In
+        const maxBreaks = window.maxBreaksFound || 2;
+        for (let i = 1; i <= maxBreaks; i++) {
+            columnWidths.push({ wch: 12 }, { wch: 12 }); // Break In, Break Out
+        }
+        columnWidths.push({ wch: 10 }); // Check Out
+    }
+    
+    ws['!cols'] = columnWidths;
+    
+    // Merge A1 to last column for rows 1-3
+    const maxBreaks = window.maxBreaksFound || 2;
+    const lastCol = hasBreakColumns ? 6 + (maxBreaks * 2) + 1 : 6; // Dynamic based on break count
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 2, c: lastCol } }];
     
     // Apply styles manually to specific cells
     if (!ws['A1']) ws['A1'] = { v: 'KFL MANPOWER AGENCY SERVER 3', t: 's' };
@@ -873,8 +1017,18 @@ function exportToExcel() {
         }
     };
     
-    // Apply border to merged cells A1:G3
-    ['B1', 'C1', 'D1', 'E1', 'F1', 'G1', 'A2', 'B2', 'C2', 'D2', 'E2', 'F2', 'G2', 'A3', 'B3', 'C3', 'D3', 'E3', 'F3', 'G3'].forEach(cell => {
+    // Apply border to merged cells
+    const borderCells = [];
+    const colLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+    for (let row = 1; row <= 3; row++) {
+        for (let col = 0; col <= lastCol; col++) {
+            if (!(row === 1 && col === 0)) { // Skip A1 as it's already styled
+                borderCells.push(`${colLetters[col]}${row}`);
+            }
+        }
+    }
+    
+    borderCells.forEach(cell => {
         if (!ws[cell]) ws[cell] = { v: '', t: 's' };
         ws[cell].s = {
             border: {
@@ -886,8 +1040,13 @@ function exportToExcel() {
         };
     });
     
-    // Apply sky blue background to header row A8:G8
-    ['A8', 'B8', 'C8', 'D8', 'E8', 'F8', 'G8'].forEach(cell => {
+    // Apply sky blue background to header row
+    const headerCells = [];
+    for (let col = 0; col <= lastCol; col++) {
+        headerCells.push(`${colLetters[col]}8`);
+    }
+    
+    headerCells.forEach(cell => {
         if (!ws[cell]) ws[cell] = { v: '', t: 's' };
         ws[cell].s = {
             fill: { fgColor: { rgb: '87CEEB' } },
