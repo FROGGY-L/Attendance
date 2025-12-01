@@ -417,9 +417,14 @@ function analyzeData(data) {
         const department = record['Department'];
         const date = record['Date'];
         const time = record['Check-In Time'] || record['Time'];
-        const type = record['Card Swiping Type'];
+        let type = record['Card Swiping Type'];
         
-        if (!id || !name || !date || !time || !type) return;
+        // If Card Swiping Type is blank or dash, check Note column
+        if (!type || type === '-' || type.trim() === '') {
+            type = record['Note'];
+        }
+        
+        if (!id || !name || !date || !time || !type || type === '-') return;
         
         // Convert numeric time to string format
         let formattedTime = time;
@@ -435,10 +440,10 @@ function analyzeData(data) {
 
         // Normalize type to handle case variations
         const lowerType = type.toLowerCase().trim();
-        const normalizedType = lowerType.includes('check out') || lowerType.includes('checkout') ? 'Check Out' : 
-                              lowerType.includes('check in') || lowerType.includes('checkin') ? 'Check In' :
-                              lowerType.includes('break in') ? 'Break In' :
-                              lowerType.includes('break out') ? 'Break Out' : type;
+        const normalizedType = lowerType === 'check out' || lowerType.includes('checkout') || lowerType === 'out' ? 'Check Out' : 
+                              lowerType === 'check in' || lowerType.includes('checkin') || lowerType === 'in' ? 'Check In' :
+                              lowerType === 'break in' || lowerType.includes('break in') ? 'Break In' :
+                              lowerType === 'break out' || lowerType.includes('break out') ? 'Break Out' : type;
 
         if (!employeeRecords[id]) {
             employeeRecords[id] = {
