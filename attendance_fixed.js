@@ -470,6 +470,7 @@ function analyzeData(data) {
     // Process each employee
     Object.entries(employeeRecords).forEach(([id, emp]) => {
         const usedRecords = new Set();
+        const processedDates = new Set(); // Track dates already processed
         
         // Debug: Log all records for this employee
         console.log(`Processing employee: ${emp.name}`);
@@ -481,9 +482,9 @@ function analyzeData(data) {
         for (let i = 0; i < emp.records.length; i++) {
             const record = emp.records[i];
             
-            // Skip if already used
-            if (usedRecords.has(i)) {
-                console.log(`  Skipping record ${i} (already used): ${record.date} ${record.time} ${record.type}`);
+            // Skip if already used or date already processed
+            if (usedRecords.has(i) || processedDates.has(record.date)) {
+                console.log(`  Skipping record ${i} (already used or date processed): ${record.date} ${record.time} ${record.type}`);
                 continue;
             }
             
@@ -496,12 +497,18 @@ function analyzeData(data) {
             console.log(`  Processing Check In: ${record.date} ${record.time}`);
             
             const checkInHour = record.dateTime.getHours();
+            const isMorningShift = checkInHour >= 6 && checkInHour < 12; // 6 AM to 12 PM is morning shift
+            const isDayShift = checkInHour >= 6 && checkInHour < 17; // 6 AM to 5 PM is day shift
             const isNightShift = checkInHour >= 17; // 5 PM or later is night shift
             let checkout = null;
             let checkoutIndex = -1;
             let remarks = '';
             
-            // Look for matching checkout
+            // Look for matching checkout - prioritize Check Out over Check In
+            let bestCheckout = null;
+            let bestCheckoutIndex = -1;
+            let bestTimeDiff = Infinity;
+            
             for (let j = i + 1; j < emp.records.length; j++) {
                 if (usedRecords.has(j)) continue;
                 
@@ -510,27 +517,34 @@ function analyzeData(data) {
                 
                 console.log(`    Checking potential checkout: ${potentialCheckout.date} ${potentialCheckout.time} ${potentialCheckout.type}, timeDiff: ${timeDiff.toFixed(2)}h`);
                 
-                // Valid checkout conditions
-                if (timeDiff >= 1 && timeDiff <= 16) {
+                // Valid checkout conditions - more flexible for day shifts
+                const minHours = (isMorningShift || isDayShift) ? 2 : 4; // Allow shorter shifts for morning/day
+                const maxHours = isNightShift ? 16 : 14; // Allow longer for night shifts, up to 14h for day shifts
+                
+                if (timeDiff >= minHours && timeDiff <= maxHours) {
                     if (potentialCheckout.type === 'Check Out') {
-                        console.log(`    Found Check Out match!`);
-                        checkout = potentialCheckout;
-                        checkoutIndex = j;
-                        break;
+                        // Prefer actual Check Out records
+                        if (timeDiff < bestTimeDiff || bestCheckout?.type !== 'Check Out') {
+                            bestCheckout = potentialCheckout;
+                            bestCheckoutIndex = j;
+                            bestTimeDiff = timeDiff;
+                            remarks = '';
+                        }
                     } else if (potentialCheckout.type === 'Check In') {
-                        // For night shift, allow shorter duration (4+ hours)
-                        // For day shift, require minimum 4 hours to capture valid shifts
-                        const minHours = 4;
-                        if (timeDiff >= minHours) {
-                            console.log(`    Found Check In match (treated as checkout)!`);
-                            checkout = potentialCheckout;
-                            checkoutIndex = j;
+                        // For day shifts ending around 5 PM, treat Check In as valid checkout
+                        const checkoutHour = potentialCheckout.dateTime.getHours();
+                        if ((isDayShift && checkoutHour >= 16) || !bestCheckout) {
+                            bestCheckout = potentialCheckout;
+                            bestCheckoutIndex = j;
+                            bestTimeDiff = timeDiff;
                             remarks = 'Check-in treated as checkout';
-                            break;
                         }
                     }
                 }
             }
+            
+            checkout = bestCheckout;
+            checkoutIndex = bestCheckoutIndex;
             
             if (checkout) {
                 const duration = (checkout.dateTime - record.dateTime) / (1000 * 60 * 60);
@@ -540,48 +554,55 @@ function analyzeData(data) {
                 usedRecords.add(i);
                 usedRecords.add(checkoutIndex);
                 
-                // Determine shift type and remarks
+                // Determine shift type based on check-in time (not checkout time)
+                let shiftType = '';
+                let finalRemarks = remarks;
+                
                 if (isNightShift) {
+                    shiftType = 'Night Shift';
                     if (duration < 4) {
-                        remarks = remarks || 'Night shift undertime';
+                        finalRemarks = finalRemarks || 'Night shift undertime';
                     } else if (duration > 12) {
-                        remarks = remarks || 'Extended night shift';
+                        finalRemarks = finalRemarks || 'Extended night shift';
                     } else {
-                        remarks = remarks || 'Night shift';
+                        finalRemarks = finalRemarks || 'Night shift';
                     }
-                    
-                    results.push({
-                        Employee: emp.name,
-                        Department: emp.department,
-                        Status: 'Night Shift',
-                        Duration: `${Math.floor(duration)}h ${Math.round((duration % 1) * 60)}m`,
-                        Date: record.date,
-                        CheckIn: record.time,
-                        CheckOut: checkout.time,
-                        Remarks: remarks
-                    });
+                } else if (isMorningShift) {
+                    shiftType = 'Morning Shift';
+                    if (duration < 2) {
+                        finalRemarks = finalRemarks || 'Short morning shift';
+                    } else if (duration > 10) {
+                        finalRemarks = finalRemarks || 'Extended morning shift';
+                    } else {
+                        finalRemarks = finalRemarks || 'Morning shift';
+                    }
                 } else {
+                    // This covers day shifts (6 AM - 5 PM check-ins)
+                    shiftType = 'Day Shift';
                     if (duration < 4) {
-                        remarks = remarks || 'Undertime - early checkout';
+                        finalRemarks = finalRemarks || 'Undertime - early checkout';
                     } else if (duration > 12) {
-                        remarks = remarks || 'Extended shift - long hours';
+                        finalRemarks = finalRemarks || 'Extended day shift';
                     } else if (duration > 9) {
-                        remarks = remarks || 'Overtime - late checkout';
+                        finalRemarks = finalRemarks || 'Day shift with overtime';
                     } else {
-                        remarks = remarks || 'Day shift';
+                        finalRemarks = finalRemarks || 'Day shift';
                     }
-                    
-                    results.push({
-                        Employee: emp.name,
-                        Department: emp.department,
-                        Status: checkInHour >= 12 ? 'Day Shift' : 'Morning Shift',
-                        Duration: `${Math.floor(duration)}h ${Math.round((duration % 1) * 60)}m`,
-                        Date: record.date,
-                        CheckIn: record.time,
-                        CheckOut: checkout.time,
-                        Remarks: remarks
-                    });
                 }
+                
+                results.push({
+                    Employee: emp.name,
+                    Department: emp.department,
+                    Status: shiftType,
+                    Duration: `${Math.floor(duration)}h ${Math.round((duration % 1) * 60)}m`,
+                    Date: record.date,
+                    CheckIn: record.time,
+                    CheckOut: checkout.time,
+                    Remarks: finalRemarks
+                });
+                
+                // Mark this date as processed
+                processedDates.add(record.date);
             } else {
                 // No checkout found - mark as missing
                 console.log(`    No checkout found for: ${record.date} ${record.time}`);
@@ -596,6 +617,9 @@ function analyzeData(data) {
                     CheckOut: '-',
                     Remarks: 'Missing checkout - no additional records'
                 });
+                
+                // Mark this date as processed
+                processedDates.add(record.date);
             }
         }
     });
