@@ -978,6 +978,55 @@ function exportToExcel() {
     wb.SheetNames.push('Attendance Pivot');
     wb.Sheets['Attendance Pivot'] = attendanceWs;
     
+    // Create For Client sheet for PHILIPS-CARBON employees
+    const hasPhilipsCarbon = window.originalWorksheet && Object.values(window.originalWorksheet).some(cell => 
+        cell && cell.v && typeof cell.v === 'string' && cell.v.toUpperCase().includes('PHILIPS-CARBON')
+    );
+    
+    if (hasPhilipsCarbon) {
+        const clientData = [
+            ['KFL MANPOWER AGENCY SERVER 3'],
+            [''],
+            [''],
+            [operator],
+            [`Export Time: ${currentDate} ${currentTime}`],
+            [`Time Period: ${minDate} - ${maxDate}`],
+            [''],
+            ['Employee ID', 'Name', 'Date and Time', 'Time Logs Type']
+        ];
+        
+        // Get PHILIPS-CARBON data from original worksheet
+        if (window.originalWorksheet) {
+            const originalData = XLSX.utils.sheet_to_json(window.originalWorksheet, { range: 7 });
+            const philipsData = originalData.filter(record => 
+                record.Department && record.Department.toUpperCase().includes('PHILIPS-CARBON')
+            );
+            
+            philipsData.forEach(record => {
+                const id = record['ID'] || '-';
+                const name = record['Name'] || '-';
+                const date = record['Date'] || '-';
+                const time = record['Check-In Time'] || record['Time'] || '-';
+                let type = record['Card Swiping Type'];
+                
+                // Check Note column if Card Swiping Type is blank
+                if (!type || type === '-' || type.trim() === '') {
+                    type = record['Note'] || '-';
+                }
+                
+                const dateTime = date !== '-' && time !== '-' ? `${date} ${time}` : '-';
+                clientData.push([id, name, dateTime, type]);
+            });
+        }
+        
+        const clientWs = XLSX.utils.aoa_to_sheet(clientData);
+        clientWs['!cols'] = [{ wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 20 }];
+        clientWs['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 2, c: 3 } }];
+        
+        wb.SheetNames.push('For Client');
+        wb.Sheets['For Client'] = clientWs;
+    }
+    
     // Create Attendance Data sheet
     const ws = XLSX.utils.aoa_to_sheet(headerData);
     XLSX.utils.sheet_add_json(ws, results, { origin: 'A8' });
