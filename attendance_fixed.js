@@ -242,6 +242,9 @@ function showToastMessage() {
     - Enhanced table display with separate columns for each break in/out time for SANTEH employees.<br>
     - Updated Attendance Pivot sheet to show detailed break sequences for SANTEH department.<br>
     - Improved data mapping to ensure break times display correctly in both main table and pivot sheet.<br>
+    - Added 'For Client' sheet for PHILIPS-CARBON department employees with client-ready format.<br>
+    - Implemented mm/dd/yyyy date format conversion specifically for client reporting requirements.<br>
+    - Enhanced Note column fallback logic when Card Swiping Type field is blank or contains dashes.<br>
     <strong>* Always double-check the data.</strong><br><br>
     For any inquiries, feel free to contact IT Personnel.<br><br>
     <strong>Thank you!</strong>
@@ -1003,18 +1006,25 @@ function exportToExcel() {
             );
             
             philipsData.forEach(record => {
-                const id = record['ID'] || '-';
-                const name = record['Name'] || '-';
-                const date = record['Date'] || '-';
-                const time = record['Check-In Time'] || record['Time'] || '-';
-                let type = record['Card Swiping Type'];
+                const id = record.ID || '-'; // ID column
+                const name = record.Name || '-'; // Name column
+                const date = record.Date || '-'; // Date column
+                const time = record['Check-In Time'] || '-'; // Check-In Time column
+                let type = record['Card Swiping Type']; // Card Swiping Type column
                 
                 // Check Note column if Card Swiping Type is blank
                 if (!type || type === '-' || type.trim() === '') {
-                    type = record['Note'] || '-';
+                    type = record.Note || '-'; // Note column
                 }
                 
-                const dateTime = date !== '-' && time !== '-' ? `${date} ${time}` : '-';
+                // Convert date from dd-mm-yyyy to mm/dd/yyyy format
+                let formattedDate = date;
+                if (date !== '-' && date.includes('-')) {
+                    const [day, month, year] = date.split('-');
+                    formattedDate = `${month}/${day}/${year}`;
+                }
+                
+                const dateTime = formattedDate !== '-' && time !== '-' ? `${formattedDate} ${time}` : '-';
                 clientData.push([id, name, dateTime, type]);
             });
         }
