@@ -494,8 +494,8 @@ function analyzeData(data) {
             console.log(`  Record ${idx}: ${r.date} ${r.time} ${r.type}`);
         });
         
-        // Check if employee is in SANTEH department
-        const isSantehEmployee = emp.department && emp.department.toUpperCase().includes('SANTEH');
+        // Check if employee is in SANTEH or KFL-STAFF department
+        const isSantehEmployee = emp.department && (emp.department.toUpperCase().includes('SANTEH') || emp.department.toUpperCase().includes('KFL-STAFF'));
         
         // Process all records chronologically to find valid shifts
         for (let i = 0; i < emp.records.length; i++) {
@@ -573,7 +573,7 @@ function analyzeData(data) {
                 usedRecords.add(i);
                 usedRecords.add(checkoutIndex);
                 
-                // Calculate break times for SANTEH employees
+                // Calculate break times for SANTEH and KFL-STAFF employees
                 let checkIn = record.time;
                 let checkOut = checkout.time;
                 let breakTimes = {};
@@ -654,7 +654,7 @@ function analyzeData(data) {
                     Remarks: finalRemarks
                 };
                 
-                // Add break columns for SANTEH employees
+                // Add break columns for SANTEH and KFL-STAFF employees
                 if (isSantehEmployee) {
                     resultRecord.CheckIn = checkIn;
                     resultRecord.CheckOut = checkOut;
@@ -764,12 +764,12 @@ function displayResults(results) {
     const table = document.createElement('table');
     const headerRow = document.createElement('tr');
 
-    // Check if any employee is from SANTEH department
+    // Check if any employee is from SANTEH or KFL-STAFF department
     const hasSantehEmployees = results.some(result => 
-        result.Department && result.Department.toUpperCase().includes('SANTEH')
+        result.Department && (result.Department.toUpperCase().includes('SANTEH') || result.Department.toUpperCase().includes('KFL-STAFF'))
     );
     
-    // Build dynamic headers for SANTEH employees
+    // Build dynamic headers for SANTEH and KFL-STAFF employees
     let headers;
     if (hasSantehEmployees) {
         headers = ['Employee', 'Department', 'Status', 'Hours Rendered', 'Date', 'Check In'];
@@ -914,7 +914,7 @@ function exportToExcel() {
         if (!employeeSummary[result.Employee]) {
             employeeSummary[result.Employee] = {
                 records: [],
-                isSanteh: result.Department && result.Department.toUpperCase().includes('SANTEH')
+                isSanteh: result.Department && (result.Department.toUpperCase().includes('SANTEH') || result.Department.toUpperCase().includes('KFL-STAFF'))
             };
         }
         
