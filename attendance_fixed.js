@@ -937,7 +937,14 @@ function exportToExcel() {
                 if (headers[colIndex] === 'Department') {
                     cellValue = cellValue.replace(/^All Departments&gt;/, '');
                 }
-                rowData[headers[colIndex]] = cellValue;
+                // Map Noon Break columns to BreakIn1/BreakOut1
+                if (headers[colIndex] === 'Noon Break In') {
+                    rowData['BreakIn1'] = cellValue;
+                } else if (headers[colIndex] === 'Noon Break Out') {
+                    rowData['BreakOut1'] = cellValue;
+                } else {
+                    rowData[headers[colIndex]] = cellValue;
+                }
             }
         });
         results.push(rowData);
@@ -962,7 +969,8 @@ function exportToExcel() {
         if (!employeeSummary[result.Employee]) {
             employeeSummary[result.Employee] = {
                 records: [],
-                isSanteh: result.Department && (result.Department.toUpperCase().includes('SANTEH') || result.Department.toUpperCase().includes('KFL-STAFF'))
+                isSanteh: result.Department && result.Department.toUpperCase().includes('SANTEH'),
+                isKflStaff: result.Department && result.Department.toUpperCase().includes('KFL-STAFF')
             };
         }
         
@@ -978,6 +986,11 @@ function exportToExcel() {
                 recordData[`BreakIn${i}`] = result[`BreakIn${i}`] || result[`${ordinal} Break In`] || '-';
                 recordData[`BreakOut${i}`] = result[`BreakOut${i}`] || result[`${ordinal} Break Out`] || '-';
             }
+        } else if (employeeSummary[result.Employee].isKflStaff) {
+            recordData.CheckIn = result.CheckIn || result['Check In'] || '-';
+            recordData.CheckOut = result.CheckOut || result['Check Out'] || '-';
+            recordData.BreakIn1 = result.BreakIn1 || result['Noon Break In'] || '-';
+            recordData.BreakOut1 = result.BreakOut1 || result['Noon Break Out'] || '-';
         } else {
             recordData.CheckIn = result.CheckIn || result['Check In'] || '-';
             recordData.CheckOut = result.CheckOut || result['Check Out'] || '-';
@@ -1009,6 +1022,14 @@ function exportToExcel() {
                     dataRow.push(record[`BreakIn${i}`] || '-', record[`BreakOut${i}`] || '-');
                 }
                 dataRow.push(record.CheckOut);
+                attendanceData.push(dataRow);
+            });
+        } else if (empData.isKflStaff) {
+            const headerRow = [employee, 'Check In', 'Noon Break In', 'Noon Break Out', 'Check Out'];
+            attendanceData.push(headerRow);
+            
+            sortedRecords.forEach(record => {
+                const dataRow = [record.Date, record.CheckIn, record.BreakIn1 || '-', record.BreakOut1 || '-', record.CheckOut];
                 attendanceData.push(dataRow);
             });
         } else {
