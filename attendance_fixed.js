@@ -245,6 +245,10 @@ function showToastMessage() {
     - Added 'For Client' sheet for PHILIPS-CARBON department employees with client-ready format.<br>
     - Implemented mm/dd/yyyy date format conversion specifically for client reporting requirements.<br>
     - Enhanced Note column fallback logic when Card Swiping Type field is blank or contains dashes.<br>
+    <strong>Update 02-02-2026:</strong><br>
+    - Added noon break tracking for KFL-STAFF department employees.<br>
+    - KFL-STAFF employees now display 'Noon Break In' and 'Noon Break Out' columns for lunch break tracking.<br>
+    - Separated break functionality: SANTEH gets all breaks, KFL-STAFF gets only noon break.<br>
     <strong>* Always double-check the data.</strong><br><br>
     For any inquiries, feel free to contact IT Personnel.<br><br>
     <strong>Thank you!</strong>
@@ -494,8 +498,10 @@ function analyzeData(data) {
             console.log(`  Record ${idx}: ${r.date} ${r.time} ${r.type}`);
         });
         
-        // Check if employee is in SANTEH or KFL-STAFF department
-        const isSantehEmployee = emp.department && (emp.department.toUpperCase().includes('SANTEH') || emp.department.toUpperCase().includes('KFL-STAFF'));
+        // Check if employee is in SANTEH department
+        const isSantehEmployee = emp.department && emp.department.toUpperCase().includes('SANTEH');
+        // Check if employee is in KFL-STAFF department (only noon break)
+        const isKflStaffEmployee = emp.department && emp.department.toUpperCase().includes('KFL-STAFF');
         
         // Process all records chronologically to find valid shifts
         for (let i = 0; i < emp.records.length; i++) {
@@ -605,6 +611,27 @@ function analyzeData(data) {
                     // Store max breaks found for this employee
                     if (!window.maxBreaksFound) window.maxBreaksFound = 0;
                     window.maxBreaksFound = Math.max(window.maxBreaksFound, breakPairIndex - 1);
+                } else if (isKflStaffEmployee) {
+                    // Find only noon break for KFL-STAFF (first break pair only)
+                    const breakRecords = [];
+                    for (let k = i + 1; k < checkoutIndex; k++) {
+                        const breakRecord = emp.records[k];
+                        if (breakRecord.type === 'Break In' || breakRecord.type === 'Break Out') {
+                            breakRecords.push(breakRecord);
+                        }
+                    }
+                    
+                    // Sort break records by time
+                    breakRecords.sort((a, b) => a.dateTime - b.dateTime);
+                    
+                    // Only assign first break pair (noon break)
+                    for (let b = 0; b < breakRecords.length - 1; b++) {
+                        if (breakRecords[b].type === 'Break In' && breakRecords[b + 1].type === 'Break Out') {
+                            breakTimes['BreakIn1'] = breakRecords[b].time;
+                            breakTimes['BreakOut1'] = breakRecords[b + 1].time;
+                            break; // Only take first break pair
+                        }
+                    }
                 }
                 
                 // Determine shift type based on check-in time (not checkout time)
@@ -664,6 +691,13 @@ function analyzeData(data) {
                         resultRecord[`BreakIn${i}`] = breakTimes[`BreakIn${i}`] || '-';
                         resultRecord[`BreakOut${i}`] = breakTimes[`BreakOut${i}`] || '-';
                     }
+                } else if (isKflStaffEmployee) {
+                    resultRecord.CheckIn = checkIn;
+                    resultRecord.CheckOut = checkOut;
+                    
+                    // Add only noon break (first break)
+                    resultRecord['BreakIn1'] = breakTimes['BreakIn1'] || '-';
+                    resultRecord['BreakOut1'] = breakTimes['BreakOut1'] || '-';
                 }
                 
                 results.push(resultRecord);
@@ -766,17 +800,26 @@ function displayResults(results) {
 
     // Check if any employee is from SANTEH or KFL-STAFF department
     const hasSantehEmployees = results.some(result => 
-        result.Department && (result.Department.toUpperCase().includes('SANTEH') || result.Department.toUpperCase().includes('KFL-STAFF'))
+        result.Department && result.Department.toUpperCase().includes('SANTEH')
     );
+    const hasKflStaffEmployees = results.some(result => 
+        result.Department && result.Department.toUpperCase().includes('KFL-STAFF')
+    );
+    const hasBreakEmployees = hasSantehEmployees || hasKflStaffEmployees;
     
-    // Build dynamic headers for SANTEH and KFL-STAFF employees
+    // Build dynamic headers for employees with breaks
     let headers;
-    if (hasSantehEmployees) {
+    if (hasBreakEmployees) {
         headers = ['Employee', 'Department', 'Status', 'Hours Rendered', 'Date', 'Check In'];
-        const maxBreaks = window.maxBreaksFound || 2;
-        for (let i = 1; i <= maxBreaks; i++) {
-            headers.push(`${i}${i === 1 ? 'st' : i === 2 ? 'nd' : i === 3 ? 'rd' : 'th'} Break In`);
-            headers.push(`${i}${i === 1 ? 'st' : i === 2 ? 'nd' : i === 3 ? 'rd' : 'th'} Break Out`);
+        if (hasSantehEmployees) {
+            const maxBreaks = window.maxBreaksFound || 2;
+            for (let i = 1; i <= maxBreaks; i++) {
+                headers.push(`${i}${i === 1 ? 'st' : i === 2 ? 'nd' : i === 3 ? 'rd' : 'th'} Break In`);
+                headers.push(`${i}${i === 1 ? 'st' : i === 2 ? 'nd' : i === 3 ? 'rd' : 'th'} Break Out`);
+            }
+        } else {
+            // Only noon break for KFL-STAFF
+            headers.push('Noon Break In', 'Noon Break Out');
         }
         headers.push('Check Out', 'Remarks');
     } else {
@@ -794,11 +837,16 @@ function displayResults(results) {
     results.forEach(result => {
         const row = document.createElement('tr');
 
-        if (hasSantehEmployees) {
+        if (hasBreakEmployees) {
             const keys = ['Employee', 'Department', 'Status', 'Duration', 'Date', 'CheckIn'];
-            const maxBreaks = window.maxBreaksFound || 2;
-            for (let i = 1; i <= maxBreaks; i++) {
-                keys.push(`BreakIn${i}`, `BreakOut${i}`);
+            if (hasSantehEmployees) {
+                const maxBreaks = window.maxBreaksFound || 2;
+                for (let i = 1; i <= maxBreaks; i++) {
+                    keys.push(`BreakIn${i}`, `BreakOut${i}`);
+                }
+            } else {
+                // Only noon break for KFL-STAFF
+                keys.push('BreakIn1', 'BreakOut1');
             }
             keys.push('CheckOut');
             
