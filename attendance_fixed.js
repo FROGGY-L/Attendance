@@ -624,12 +624,42 @@ function analyzeData(data) {
                     // Sort break records by time
                     breakRecords.sort((a, b) => a.dateTime - b.dateTime);
                     
-                    // Only assign first break pair (noon break)
-                    for (let b = 0; b < breakRecords.length - 1; b++) {
-                        if (breakRecords[b].type === 'Break In' && breakRecords[b + 1].type === 'Break Out') {
-                            breakTimes['BreakIn1'] = breakRecords[b].time;
-                            breakTimes['BreakOut1'] = breakRecords[b + 1].time;
-                            break; // Only take first break pair
+                    // Handle mismatched break records - fix break in/out order
+                    if (breakRecords.length >= 2) {
+                        // Check if first record is around noon (11:00-14:00)
+                        const firstRecord = breakRecords[0];
+                        const firstHour = firstRecord.dateTime.getHours();
+                        
+                        if (firstHour >= 11 && firstHour <= 14) {
+                            // Find the closest second record for pairing
+                            for (let b = 1; b < breakRecords.length; b++) {
+                                const secondRecord = breakRecords[b];
+                                const secondHour = secondRecord.dateTime.getHours();
+                                
+                                // If both records are in noon timeframe, pair them regardless of type
+                                if (secondHour >= 11 && secondHour <= 14) {
+                                    // Determine which should be break in vs break out based on time
+                                    if (firstRecord.dateTime < secondRecord.dateTime) {
+                                        breakTimes['BreakIn1'] = firstRecord.time;
+                                        breakTimes['BreakOut1'] = secondRecord.time;
+                                    } else {
+                                        breakTimes['BreakIn1'] = secondRecord.time;
+                                        breakTimes['BreakOut1'] = firstRecord.time;
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // If no noon break pair found, try normal pairing
+                    if (!breakTimes['BreakIn1']) {
+                        for (let b = 0; b < breakRecords.length - 1; b++) {
+                            if (breakRecords[b].type === 'Break In' && breakRecords[b + 1].type === 'Break Out') {
+                                breakTimes['BreakIn1'] = breakRecords[b].time;
+                                breakTimes['BreakOut1'] = breakRecords[b + 1].time;
+                                break;
+                            }
                         }
                     }
                 }
