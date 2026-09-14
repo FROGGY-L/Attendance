@@ -7,6 +7,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Excel Upload and Analyze</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 
@@ -18,7 +20,8 @@
             </button>
             <img src="logo1.png" alt="logo" width="400" height="400" class="centered-image">
             <h1>Employee Attendance Calculator</h1>
-            <p style="color: #7f8c8d; font-size: 1.1rem; margin-bottom: 0;">Streamline your workforce management with precision</p>
+            <p style="color: #7f8c8d; font-size: 1.1rem; margin-bottom: 0;">Streamline your workforce management with
+                precision</p>
         </div>
 
         <div class="main-content" id="mainContent">
@@ -64,7 +67,8 @@
             </div>
         </div>
         <div class="footer-social">
-            <a href="https://www.facebook.com/kflmanpoweragencyofficialpage/" target="_blank" class="social-icon"><i class="fab fa-facebook-f"></i></a>
+            <a href="https://www.facebook.com/kflmanpoweragencyofficialpage/" target="_blank" class="social-icon"><i
+                    class="fab fa-facebook-f"></i></a>
             <a href="https://twitter.com" target="_blank" class="social-icon"><i class="fab fa-twitter"></i></a>
             <a href="https://google.com" target="_blank" class="social-icon"><i class="fab fa-google"></i></a>
             <a href="https://linkedin.com" target="_blank" class="social-icon"><i class="fab fa-linkedin-in"></i></a>
@@ -97,38 +101,38 @@
             const modalContent = document.getElementById("modal-content");
 
             modalContent.innerHTML = `
-                <button class="close-btn" onclick="closeModal()">&times;</button>
-                <h2>Privacy Policy</h2>
-                <p><strong>Effective Date:</strong> January 20, 2025</p>
-                
-                <p>Welcome to Employee Attendance Calculator! Your privacy is very important to us. This Privacy Policy outlines the types of personal information we collect, how we use it, and the measures we take to protect your data.</p>
+                        <button class="close-btn" onclick="closeModal()">&times;</button>
+                        <h2>Privacy Policy</h2>
+                        <p><strong>Effective Date:</strong> January 20, 2025</p>
 
-                <h4>Information We Collect</h4>
-                <p>We may collect the following types of information:</p>
-                <ul>
-                    <li>Personal identification information (e.g., name, email address, phone number)</li>
-                    <li>Browser and device information</li>
-                    <li>IP addresses and usage data</li>
-                </ul>
+                        <p>Welcome to Employee Attendance Calculator! Your privacy is very important to us. This Privacy Policy outlines the types of personal information we collect, how we use it, and the measures we take to protect your data.</p>
 
-                <h4>How We Use Your Information</h4>
-                <p>We use the information we collect for the following purposes:</p>
-                <ul>
-                    <li>To provide and maintain our service</li>
-                    <li>To communicate with you, including customer support</li>
-                    <li>To improve our website and services</li>
-                    <li>To comply with legal obligations</li>
-                </ul>
+                        <h4>Information We Collect</h4>
+                        <p>We may collect the following types of information:</p>
+                        <ul>
+                            <li>Personal identification information (e.g., name, email address, phone number)</li>
+                            <li>Browser and device information</li>
+                            <li>IP addresses and usage data</li>
+                        </ul>
 
-                <h4>Contact Us</h4>
-                <p>If you have any questions about this Privacy Policy, please contact us at <a href="mailto:it@kflmanpoweragency.com">it@kflmanpoweragency.com</a>.</p>
-            `;
-            
+                        <h4>How We Use Your Information</h4>
+                        <p>We use the information we collect for the following purposes:</p>
+                        <ul>
+                            <li>To provide and maintain our service</li>
+                            <li>To communicate with you, including customer support</li>
+                            <li>To improve our website and services</li>
+                            <li>To comply with legal obligations</li>
+                        </ul>
+
+                        <h4>Contact Us</h4>
+                        <p>If you have any questions about this Privacy Policy, please contact us at <a href="mailto:it@kflmanpoweragency.com">it@kflmanpoweragency.com</a>.</p>
+                        `;
+
             // Add animation
             modal.style.opacity = '0';
             modal.style.transform = 'scale(0.7)';
             modal.classList.add("show");
-            
+
             setTimeout(() => {
                 modal.style.transition = 'all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
                 modal.style.opacity = '1';
@@ -141,33 +145,33 @@
             const modalContent = document.getElementById("modal-content");
 
             modalContent.innerHTML = `
-                <button class="close-btn" onclick="closeModal()">&times;</button>
-                <h2>Terms of Service</h2>
-                <p><strong>Effective Date:</strong> January 20, 2025</p>
-                
-                <p>Welcome to Employee Attendance Calculator! These Terms of Service govern your access to and use of our website and services.</p>
+                        <button class="close-btn" onclick="closeModal()">&times;</button>
+                        <h2>Terms of Service</h2>
+                        <p><strong>Effective Date:</strong> January 20, 2025</p>
 
-                <h4>Use of Service</h4>
-                <p>You agree to use our services only for lawful purposes and in a manner consistent with all applicable laws and regulations.</p>
+                        <p>Welcome to Employee Attendance Calculator! These Terms of Service govern your access to and use of our website and services.</p>
 
-                <h4>Limitation of Liability</h4>
-                <p>KFL Manpower Agency will not be liable for any indirect, incidental, or consequential damages arising from your use of our services.</p>
+                        <h4>Use of Service</h4>
+                        <p>You agree to use our services only for lawful purposes and in a manner consistent with all applicable laws and regulations.</p>
 
-                <h4>Termination</h4>
-                <p>We reserve the right to terminate or suspend your access to our services at any time for any reason, including but not limited to a breach of these Terms.</p>
+                        <h4>Limitation of Liability</h4>
+                        <p>KFL Manpower Agency will not be liable for any indirect, incidental, or consequential damages arising from your use of our services.</p>
 
-                <h4>Changes to These Terms</h4>
-                <p>We may update these Terms from time to time. We will notify you of any changes by posting the updated Terms on our website.</p>
+                        <h4>Termination</h4>
+                        <p>We reserve the right to terminate or suspend your access to our services at any time for any reason, including but not limited to a breach of these Terms.</p>
 
-                <h4>Contact Us</h4>
-                <p>If you have any questions about these Terms, please contact us at <a href="mailto:admin@kflmanpoweragency.com">admin@kflmanpoweragency.com</a>.</p>
-            `;
-            
+                        <h4>Changes to These Terms</h4>
+                        <p>We may update these Terms from time to time. We will notify you of any changes by posting the updated Terms on our website.</p>
+
+                        <h4>Contact Us</h4>
+                        <p>If you have any questions about these Terms, please contact us at <a href="mailto:admin@kflmanpoweragency.com">admin@kflmanpoweragency.com</a>.</p>
+                        `;
+
             // Add animation
             modal.style.opacity = '0';
             modal.style.transform = 'scale(0.7)';
             modal.classList.add("show");
-            
+
             setTimeout(() => {
                 modal.style.transition = 'all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
                 modal.style.opacity = '1';
@@ -180,32 +184,32 @@
             const modalContent = document.getElementById("modal-content");
 
             modalContent.innerHTML = `
-                <button class="close-btn" onclick="closeModal()">&times;</button>
-                <h2>Contact Us</h2>
-                <p>We'd love to hear from you! Get in touch with us using the information below:</p>
+                        <button class="close-btn" onclick="closeModal()">&times;</button>
+                        <h2>Contact Us</h2>
+                        <p>We'd love to hear from you! Get in touch with us using the information below:</p>
 
-                <h4>Email</h4>
-                <p><a href="mailto:admin@kflmanpoweragency.com">admin@kflmanpoweragency.com</a></p>
+                        <h4>Email</h4>
+                        <p><a href="mailto:admin@kflmanpoweragency.com">admin@kflmanpoweragency.com</a></p>
 
-                <h4>Phone</h4>
-                <p>+63 123 456 7890</p>
+                        <h4>Phone</h4>
+                        <p>+63 123 456 7890</p>
 
-                <h4>Address</h4>
-                <p>KFL Manpower Agency<br>
-                123 Business Street<br>
-                Manila, Philippines</p>
+                        <h4>Address</h4>
+                        <p>KFL Manpower Agency<br>
+                            123 Business Street<br>
+                                Manila, Philippines</p>
 
-                <h4>Business Hours</h4>
-                <p>Monday - Friday: 8:00 AM - 5:00 PM<br>
-                Saturday: 9:00 AM - 1:00 PM<br>
-                Sunday: Closed</p>
+                            <h4>Business Hours</h4>
+                            <p>Monday - Friday: 8:00 AM - 5:00 PM<br>
+                                Saturday: 9:00 AM - 1:00 PM<br>
+                                    Sunday: Closed</p>
             `;
-            
+
             // Add animation
             modal.style.opacity = '0';
             modal.style.transform = 'scale(0.7)';
             modal.classList.add("show");
-            
+
             setTimeout(() => {
                 modal.style.transition = 'all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
                 modal.style.opacity = '1';
@@ -215,12 +219,12 @@
 
         function closeModal() {
             const modal = document.getElementById("modal");
-            
+
             // Add exit animation
             modal.style.transition = 'all 0.3s ease';
             modal.style.opacity = '0';
             modal.style.transform = 'scale(0.7)';
-            
+
             setTimeout(() => {
                 modal.classList.remove("show");
                 modal.style.transform = 'scale(1)';
@@ -228,7 +232,7 @@
         }
 
         // Close modal when clicking outside
-        window.onclick = function(event) {
+        window.onclick = function (event) {
             const modal = document.getElementById("modal");
             if (event.target === modal) {
                 closeModal();
@@ -248,7 +252,7 @@
         function toggleCompactLayout(compact) {
             const headerSection = document.querySelector('.header-section');
             const mainContent = document.getElementById('mainContent');
-            
+
             if (compact) {
                 headerSection.classList.add('compact');
                 mainContent.classList.add('has-data');
@@ -260,7 +264,7 @@
 
         // Override processFile to add compact layout
         const originalProcessFile = window.processFile;
-        window.processFile = function() {
+        window.processFile = function () {
             toggleCompactLayout(true);
             if (originalProcessFile) {
                 originalProcessFile();
@@ -269,7 +273,7 @@
 
         // Override clearFile to restore layout
         const originalClearFile = window.clearFile;
-        window.clearFile = function() {
+        window.clearFile = function () {
             toggleCompactLayout(false);
             if (originalClearFile) {
                 originalClearFile();
@@ -465,8 +469,13 @@
         }
 
         @keyframes logoRotate {
-            from { transform: translate(-50%, -50%) rotate(0deg); }
-            to { transform: translate(-50%, -50%) rotate(360deg); }
+            from {
+                transform: translate(-50%, -50%) rotate(0deg);
+            }
+
+            to {
+                transform: translate(-50%, -50%) rotate(360deg);
+            }
         }
 
         footer::before {
@@ -476,12 +485,12 @@
             left: 0;
             width: 200%;
             height: 100%;
-            background: linear-gradient(90deg, 
-                transparent, 
-                rgba(79, 172, 254, 0.1), 
-                rgba(0, 242, 254, 0.2), 
-                rgba(67, 233, 123, 0.1), 
-                transparent);
+            background: linear-gradient(90deg,
+                    transparent,
+                    rgba(79, 172, 254, 0.1),
+                    rgba(0, 242, 254, 0.2),
+                    rgba(67, 233, 123, 0.1),
+                    transparent);
             animation: wave 4s linear infinite;
         }
 
@@ -489,6 +498,7 @@
             0% {
                 transform: translateX(-100%);
             }
+
             100% {
                 transform: translateX(50%);
             }
@@ -527,7 +537,7 @@
                 text-align: center;
                 gap: 10px;
             }
-            
+
             .footer-right ul {
                 flex-wrap: wrap;
                 justify-content: center;
@@ -581,7 +591,7 @@
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0,0,0,0.5);
+            background-color: rgba(0, 0, 0, 0.5);
         }
 
         .modal-content {
@@ -682,7 +692,9 @@
             }
         }
 
-        .calculate-button, .export-button, .clear-button {
+        .calculate-button,
+        .export-button,
+        .clear-button {
             padding: 15px 30px;
             border: none;
             border-radius: 30px;
@@ -695,7 +707,10 @@
         }
 
         @media (max-width: 768px) {
-            .calculate-button, .export-button, .clear-button {
+
+            .calculate-button,
+            .export-button,
+            .clear-button {
                 padding: 12px 24px;
                 font-size: 14px;
                 min-width: 100px;
@@ -768,7 +783,7 @@
                 padding: 12px 15px;
                 min-width: 120px;
             }
-            
+
             .button-container {
                 flex-direction: column;
                 align-items: center;
@@ -867,7 +882,8 @@
             background: white;
         }
 
-        th, td {
+        th,
+        td {
             padding: 8px 12px;
             text-align: left;
             border-bottom: 1px solid #ecf0f1;

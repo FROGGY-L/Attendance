@@ -1045,7 +1045,7 @@ function displayResults(results) {
   output.appendChild(tableContainer);
 }
 
-function exportToExcel() {
+async function exportToExcel() {
   const output = document.getElementById("output");
   const table = output.querySelector("table");
 
@@ -1054,20 +1054,19 @@ function exportToExcel() {
     return;
   }
 
+  // Extract data from the HTML table
   const results = [];
   const headers = Array.from(table.querySelectorAll("th")).map(
     (th) => th.textContent,
   );
   const rows = table.querySelectorAll("tr");
-
-  // Check if break columns are present
   const hasBreakColumns = headers.some((h) => h.includes("Break In"));
 
-  // Get date range from results
+  // Get date range
   const dates = [];
   rows.forEach((row, rowIndex) => {
     if (rowIndex === 0) return;
-    const dateCell = row.cells[4]; // Date column
+    const dateCell = row.cells[4];
     if (dateCell) dates.push(dateCell.textContent);
   });
 
@@ -1082,39 +1081,21 @@ function exportToExcel() {
   const minDate = sortedDates[0] || "";
   const maxDate = sortedDates[sortedDates.length - 1] || "";
 
-  // Current date and time
   const now = new Date();
   const currentDate = `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
   const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-
   const operator = window.currentOperator || "";
-
-  // Create header data with centered company name using spaces
-  const headerData = [
-    [
-      "                                                                                                                              KFL MANPOWER AGENCY SERVER 3                    ",
-    ],
-    [""],
-    [""],
-    [operator],
-    [`Export Time: ${currentDate} ${currentTime}`],
-    [`Time Period: ${minDate} - ${maxDate}`],
-    [""],
-  ];
 
   rows.forEach((row, rowIndex) => {
     if (rowIndex === 0) return;
-
     const rowData = {};
     const cells = row.querySelectorAll("td");
     cells.forEach((cell, colIndex) => {
       if (headers[colIndex] !== "Remarks") {
         let cellValue = cell.textContent;
-        // Remove "All Departments>" from department
         if (headers[colIndex] === "Department") {
           cellValue = cellValue.replace(/^All Departments&gt;/, "");
         }
-        // Map Noon Break columns to BreakIn1/BreakOut1
         if (headers[colIndex] === "Noon Break In") {
           rowData["BreakIn1"] = cellValue;
         } else if (headers[colIndex] === "Noon Break Out") {
@@ -1127,20 +1108,57 @@ function exportToExcel() {
     results.push(rowData);
   });
 
-  const wb = XLSX.utils.book_new();
+  // ============ CREATE WORKBOOK WITH EXCELJS ============
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "KFL Manpower Agency";
+  wb.created = new Date();
 
-  // Create Attendance Pivot sheet first
-  const attendanceData = [
-    ["KFL MANPOWER AGENCY SERVER 3"],
-    [""],
-    [""],
-    [operator],
-    [`Export Time: ${currentDate} ${currentTime}`],
-    [`Time Period: ${minDate} - ${maxDate}`],
-    [""],
-    ["Employee"],
-  ];
+  const maxBreaks = window.maxBreaksFound || 2;
+  const lastColIndex = hasBreakColumns ? 6 + maxBreaks * 2 + 1 : 7;
 
+  // ===== SHEET 1: Attendance Pivot =====
+  const pivotSheet = wb.addWorksheet("Attendance Pivot", {
+    views: [{ state: "frozen", ySplit: 8 }],
+  });
+
+  // Company header (merged A1:G3)
+  pivotSheet.mergeCells(1, 1, 3, 7);
+  const companyCell = pivotSheet.getCell("A1");
+  companyCell.value = "KFL MANPOWER AGENCY SERVER 3";
+  companyCell.font = { bold: true, size: 16, color: { argb: "FF1F4E78" } };
+  companyCell.alignment = { horizontal: "center", vertical: "middle" };
+  companyCell.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFD9E1F2" },
+  };
+  companyCell.border = {
+    top: { style: "double" },
+    bottom: { style: "double" },
+    left: { style: "double" },
+    right: { style: "double" },
+  };
+
+  // Apply border to merged cells
+  for (let r = 1; r <= 3; r++) {
+    for (let c = 1; c <= 7; c++) {
+      pivotSheet.getCell(r, c).border = {
+        top: { style: "double" },
+        bottom: { style: "double" },
+        left: { style: "double" },
+        right: { style: "double" },
+      };
+    }
+  }
+
+  // Operator + export info
+  pivotSheet.getCell("A4").value = operator;
+  pivotSheet.getCell("A4").font = { bold: true, size: 11 };
+  pivotSheet.getCell("A5").value = `Export Time: ${currentDate} ${currentTime}`;
+  pivotSheet.getCell("A6").value = `Time Period: ${minDate} - ${maxDate}`;
+  pivotSheet.getCell("A6").font = { italic: true };
+
+  // Employee summary (same logic as before)
   const employeeSummary = {};
   results.forEach((result) => {
     if (!employeeSummary[result.Employee]) {
@@ -1160,8 +1178,6 @@ function exportToExcel() {
     if (employeeSummary[result.Employee].isSanteh) {
       recordData.CheckIn = result.CheckIn || result["Check In"] || "-";
       recordData.CheckOut = result.CheckOut || result["Check Out"] || "-";
-
-      const maxBreaks = window.maxBreaksFound || 2;
       for (let i = 1; i <= maxBreaks; i++) {
         const ordinal =
           i === 1 ? "1st" : i === 2 ? "2nd" : i === 3 ? "3rd" : `${i}th`;
@@ -1184,6 +1200,7 @@ function exportToExcel() {
     employeeSummary[result.Employee].records.push(recordData);
   });
 
+  let pivotRow = 8;
   Object.entries(employeeSummary).forEach(([employee, empData]) => {
     const sortedRecords = empData.records.sort((a, b) => {
       const [dayA, monthA, yearA] = a.Date.split("-").map(Number);
@@ -1193,22 +1210,64 @@ function exportToExcel() {
       );
     });
 
-    if (empData.isSanteh) {
-      const headerRow = [employee, "Check In"];
-      const maxBreaks = window.maxBreaksFound || 2;
-      for (let i = 1; i <= maxBreaks; i++) {
-        headerRow.push(
-          `${i}${i === 1 ? "st" : i === 2 ? "nd" : i === 3 ? "rd" : "th"} Break In`,
-        );
-        headerRow.push(
-          `${i}${i === 1 ? "st" : i === 2 ? "nd" : i === 3 ? "rd" : "th"} Break Out`,
-        );
-      }
-      headerRow.push("Check Out");
-      attendanceData.push(headerRow);
+    // Employee name row (styled)
+    pivotSheet.mergeCells(pivotRow, 1, pivotRow, 7);
+    const empCell = pivotSheet.getCell(pivotRow, 1);
+    empCell.value = employee;
+    empCell.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
+    empCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF4472C4" },
+    };
+    empCell.alignment = { horizontal: "left", vertical: "middle" };
+    pivotRow++;
 
-      sortedRecords.forEach((record) => {
-        const dataRow = [record.Date, record.CheckIn];
+    // Header row
+    let headerCols = [];
+    if (empData.isSanteh) {
+      headerCols = ["Date", "Check In"];
+      for (let i = 1; i <= maxBreaks; i++) {
+        const ord = i === 1 ? "st" : i === 2 ? "nd" : i === 3 ? "rd" : "th";
+        headerCols.push(`${i}${ord} Break In`, `${i}${ord} Break Out`);
+      }
+      headerCols.push("Check Out");
+    } else if (empData.isKflStaff) {
+      headerCols = [
+        "Date",
+        "Check In",
+        "Noon Break In",
+        "Noon Break Out",
+        "Check Out",
+      ];
+    } else {
+      headerCols = ["Date", "CheckIn", "CheckOut"];
+    }
+
+    headerCols.forEach((h, idx) => {
+      const cell = pivotSheet.getCell(pivotRow, idx + 1);
+      cell.value = h;
+      cell.font = { bold: true, size: 10 };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFD9E1F2" },
+      };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = {
+        top: { style: "thin" },
+        bottom: { style: "thin" },
+        left: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+    pivotRow++;
+
+    // Data rows
+    sortedRecords.forEach((record) => {
+      let dataRow = [];
+      if (empData.isSanteh) {
+        dataRow = [record.Date, record.CheckIn];
         for (let i = 1; i <= maxBreaks; i++) {
           dataRow.push(
             record[`BreakIn${i}`] || "-",
@@ -1216,55 +1275,47 @@ function exportToExcel() {
           );
         }
         dataRow.push(record.CheckOut);
-        attendanceData.push(dataRow);
-      });
-    } else if (empData.isKflStaff) {
-      const headerRow = [
-        employee,
-        "Check In",
-        "Noon Break In",
-        "Noon Break Out",
-        "Check Out",
-      ];
-      attendanceData.push(headerRow);
-
-      sortedRecords.forEach((record) => {
-        const dataRow = [
+      } else if (empData.isKflStaff) {
+        dataRow = [
           record.Date,
           record.CheckIn,
           record.BreakIn1 || "-",
           record.BreakOut1 || "-",
           record.CheckOut,
         ];
-        attendanceData.push(dataRow);
+      } else {
+        dataRow = [record.Date, record.CheckIn, record.CheckOut];
+      }
+
+      dataRow.forEach((val, idx) => {
+        const cell = pivotSheet.getCell(pivotRow, idx + 1);
+        cell.value = val;
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.border = {
+          top: { style: "thin" },
+          bottom: { style: "thin" },
+          left: { style: "thin" },
+          right: { style: "thin" },
+        };
+        cell.font = { size: 10 };
       });
-    } else {
-      attendanceData.push([employee, "CheckIn", "CheckOut"]);
-      sortedRecords.forEach((record) => {
-        attendanceData.push([record.Date, record.CheckIn, record.CheckOut]);
-      });
-    }
-    attendanceData.push(["", "", "", "", "", "", ""]);
+      pivotRow++;
+    });
+
+    pivotRow++; // Blank row between employees
   });
 
-  const attendanceWs = XLSX.utils.aoa_to_sheet(attendanceData);
-  attendanceWs["!cols"] = [
-    { wch: 20 },
-    { wch: 12 },
-    { wch: 12 },
-    { wch: 12 },
-    { wch: 12 },
-    { wch: 12 },
-    { wch: 12 },
+  pivotSheet.columns = [
+    { width: 15 },
+    { width: 12 },
+    { width: 12 },
+    { width: 12 },
+    { width: 12 },
+    { width: 12 },
+    { width: 12 },
   ];
 
-  // Merge A1:G3 for company name
-  attendanceWs["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 2, c: 6 } }];
-
-  wb.SheetNames.push("Attendance Pivot");
-  wb.Sheets["Attendance Pivot"] = attendanceWs;
-
-  // Create For Client sheet for PHILIPS-CARBON employees
+  // ===== SHEET 2: For Client (PHILIPS-CARBON) =====
   const hasPhilipsCarbon =
     window.originalWorksheet &&
     Object.values(window.originalWorksheet).some(
@@ -1276,18 +1327,57 @@ function exportToExcel() {
     );
 
   if (hasPhilipsCarbon) {
-    const clientData = [
-      ["KFL MANPOWER AGENCY SERVER 3"],
-      [""],
-      [""],
-      [operator],
-      [`Export Time: ${currentDate} ${currentTime}`],
-      [`Time Period: ${minDate} - ${maxDate}`],
-      [""],
-      ["Employee ID", "Name", "Date and Time", "Time Logs Type"],
-    ];
+    const clientSheet = wb.addWorksheet("For Client");
 
-    // Get PHILIPS-CARBON data from original worksheet
+    clientSheet.mergeCells(1, 1, 3, 4);
+    const clientTitle = clientSheet.getCell("A1");
+    clientTitle.value = "KFL MANPOWER AGENCY SERVER 3";
+    clientTitle.font = { bold: true, size: 16, color: { argb: "FF1F4E78" } };
+    clientTitle.alignment = { horizontal: "center", vertical: "middle" };
+    clientTitle.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFD9E1F2" },
+    };
+    clientTitle.border = {
+      top: { style: "double" },
+      bottom: { style: "double" },
+      left: { style: "double" },
+      right: { style: "double" },
+    };
+
+    clientSheet.getCell("A4").value = operator;
+    clientSheet.getCell("A4").font = { bold: true };
+    clientSheet.getCell("A5").value =
+      `Export Time: ${currentDate} ${currentTime}`;
+    clientSheet.getCell("A6").value = `Time Period: ${minDate} - ${maxDate}`;
+
+    // Client headers
+    const clientHeaders = [
+      "Employee ID",
+      "Name",
+      "Date and Time",
+      "Time Logs Type",
+    ];
+    clientHeaders.forEach((h, idx) => {
+      const cell = clientSheet.getCell(8, idx + 1);
+      cell.value = h;
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF305496" },
+      };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = {
+        top: { style: "thin" },
+        bottom: { style: "thin" },
+        left: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+
+    // Client data
     if (window.originalWorksheet) {
       const originalData = XLSX.utils.sheet_to_json(window.originalWorksheet, {
         range: 7,
@@ -1298,19 +1388,17 @@ function exportToExcel() {
           record.Department.toUpperCase().includes("PHILIPS-CARBON"),
       );
 
+      let clientRow = 9;
       philipsData.forEach((record) => {
-        const id = record.ID || "-"; // ID column
-        const name = record.Name || "-"; // Name column
-        const date = record.Date || "-"; // Date column
-        const time = record["Check-In Time"] || "-"; // Check-In Time column
-        let type = record["Card Swiping Type"]; // Card Swiping Type column
-
-        // Check Note column if Card Swiping Type is blank
+        const id = record.ID || "-";
+        const name = record.Name || "-";
+        const date = record.Date || "-";
+        const time = record["Check-In Time"] || "-";
+        let type = record["Card Swiping Type"];
         if (!type || type === "-" || type.trim() === "") {
-          type = record.Note || "-"; // Note column
+          type = record.Note || "-";
         }
 
-        // Convert date from dd-mm-yyyy to mm/dd/yyyy format
         let formattedDate = date;
         if (date !== "-" && date.includes("-")) {
           const [day, month, year] = date.split("-");
@@ -1321,121 +1409,212 @@ function exportToExcel() {
           formattedDate !== "-" && time !== "-"
             ? `${formattedDate} ${time}`
             : "-";
-        clientData.push([id, name, dateTime, type]);
+
+        [id, name, dateTime, type].forEach((val, idx) => {
+          const cell = clientSheet.getCell(clientRow, idx + 1);
+          cell.value = val;
+          cell.alignment = { horizontal: "left", vertical: "middle" };
+          cell.border = {
+            top: { style: "thin" },
+            bottom: { style: "thin" },
+            left: { style: "thin" },
+            right: { style: "thin" },
+          };
+        });
+        clientRow++;
       });
     }
 
-    const clientWs = XLSX.utils.aoa_to_sheet(clientData);
-    clientWs["!cols"] = [{ wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 20 }];
-    clientWs["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 2, c: 3 } }];
-
-    wb.SheetNames.push("For Client");
-    wb.Sheets["For Client"] = clientWs;
+    clientSheet.columns = [
+      { width: 15 },
+      { width: 25 },
+      { width: 22 },
+      { width: 20 },
+    ];
   }
 
-  // Create Attendance Data sheet
-  const ws = XLSX.utils.aoa_to_sheet(headerData);
-  XLSX.utils.sheet_add_json(ws, results, { origin: "A8" });
+  // ===== SHEET 3: Attendance Data =====
+  const dataSheet = wb.addWorksheet("Attendance Data", {
+    views: [{ state: "frozen", ySplit: 8 }],
+  });
 
-  // Set column widths with text wrapping
-  const columnWidths = [
-    { wch: 25, wrapText: true }, // Employee
-    { wch: 50, wrapText: true }, // Department
-    { wch: 15 }, // Status
-    { wch: 20 }, // Hours Rendered
-    { wch: 12 }, // Date
-    { wch: 10 }, // CheckIn
-    { wch: 10 }, // CheckOut
-  ];
-
-  if (hasBreakColumns) {
-    columnWidths.push({ wch: 10 }); // Check In
-    const maxBreaks = window.maxBreaksFound || 2;
-    for (let i = 1; i <= maxBreaks; i++) {
-      columnWidths.push({ wch: 12 }, { wch: 12 }); // Break In, Break Out
-    }
-    columnWidths.push({ wch: 10 }); // Check Out
-  }
-
-  ws["!cols"] = columnWidths;
-
-  // Merge A1 to last column for rows 1-3
-  const maxBreaks = window.maxBreaksFound || 2;
-  const lastCol = hasBreakColumns ? 6 + maxBreaks * 2 + 1 : 6; // Dynamic based on break count
-  ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 2, c: lastCol } }];
-
-  // Apply styles manually to specific cells
-  if (!ws["A1"]) ws["A1"] = { v: "KFL MANPOWER AGENCY SERVER 3", t: "s" };
-  ws["A1"].s = {
-    alignment: { horizontal: "center", vertical: "center" },
-    font: { bold: true, sz: 14 },
-    border: {
-      top: { style: "double" },
-      bottom: { style: "double" },
-      left: { style: "double" },
-      right: { style: "double" },
-    },
+  dataSheet.mergeCells(1, 1, 3, lastColIndex + 1);
+  const dataTitle = dataSheet.getCell("A1");
+  dataTitle.value = "KFL MANPOWER AGENCY SERVER 3";
+  dataTitle.font = { bold: true, size: 16, color: { argb: "FF1F4E78" } };
+  dataTitle.alignment = { horizontal: "center", vertical: "middle" };
+  dataTitle.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFD9E1F2" },
+  };
+  dataTitle.border = {
+    top: { style: "double" },
+    bottom: { style: "double" },
+    left: { style: "double" },
+    right: { style: "double" },
   };
 
-  // Apply border to merged cells
-  const borderCells = [];
-  const colLetters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
-  for (let row = 1; row <= 3; row++) {
-    for (let col = 0; col <= lastCol; col++) {
-      if (!(row === 1 && col === 0)) {
-        // Skip A1 as it's already styled
-        borderCells.push(`${colLetters[col]}${row}`);
-      }
-    }
-  }
-
-  borderCells.forEach((cell) => {
-    if (!ws[cell]) ws[cell] = { v: "", t: "s" };
-    ws[cell].s = {
-      border: {
+  for (let r = 1; r <= 3; r++) {
+    for (let c = 1; c <= lastColIndex + 1; c++) {
+      dataSheet.getCell(r, c).border = {
         top: { style: "double" },
         bottom: { style: "double" },
         left: { style: "double" },
         right: { style: "double" },
-      },
-    };
-  });
-
-  // Apply sky blue background to header row
-  const headerCells = [];
-  for (let col = 0; col <= lastCol; col++) {
-    headerCells.push(`${colLetters[col]}8`);
+      };
+    }
   }
 
-  headerCells.forEach((cell) => {
-    if (!ws[cell]) ws[cell] = { v: "", t: "s" };
-    ws[cell].s = {
-      fill: { fgColor: { rgb: "87CEEB" } },
-      font: { bold: true },
+  dataSheet.getCell("A4").value = operator;
+  dataSheet.getCell("A4").font = { bold: true };
+  dataSheet.getCell("A5").value = `Export Time: ${currentDate} ${currentTime}`;
+  dataSheet.getCell("A6").value = `Time Period: ${minDate} - ${maxDate}`;
+
+  // Header row 8
+  headers.forEach((h, idx) => {
+    const cell = dataSheet.getCell(8, idx + 1);
+    cell.value = h;
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF305496" },
+    };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = {
+      top: { style: "thin" },
+      bottom: { style: "thin" },
+      left: { style: "thin" },
+      right: { style: "thin" },
     };
   });
 
-  wb.SheetNames.push("Attendance Data");
-  wb.Sheets["Attendance Data"] = ws;
+  // Data rows
+  let dataRow = 9;
+  results.forEach((result) => {
+    let rowValues = [];
+    if (hasBreakColumns) {
+      const keys = [
+        "Employee",
+        "Department",
+        "Status",
+        "Duration",
+        "Date",
+        "CheckIn",
+      ];
+      if (headers.some((h) => h.includes("1st Break In"))) {
+        for (let i = 1; i <= maxBreaks; i++) {
+          keys.push(`BreakIn${i}`, `BreakOut${i}`);
+        }
+      } else {
+        keys.push("BreakIn1", "BreakOut1");
+      }
+      keys.push("CheckOut");
+      rowValues = keys.map((k) => result[k] || "-");
+    } else {
+      rowValues = [
+        "Employee",
+        "Department",
+        "Status",
+        "Duration",
+        "Date",
+        "CheckIn",
+        "CheckOut",
+      ].map((k) => result[k] || "-");
+    }
+    rowValues.push(result.Remarks || "Normal");
 
-  // Create Original Data sheet
+    rowValues.forEach((val, idx) => {
+      const cell = dataSheet.getCell(dataRow, idx + 1);
+      cell.value = val;
+      cell.alignment = { horizontal: "left", vertical: "middle" };
+      cell.border = {
+        top: { style: "thin" },
+        bottom: { style: "thin" },
+        left: { style: "thin" },
+        right: { style: "thin" },
+      };
+      cell.font = { size: 10 };
+
+      // Highlight "Missing Check Out" in red
+      if (val === "Missing Check Out") {
+        cell.font = { size: 10, color: { argb: "FFC00000" }, bold: true };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFE5E5" },
+        };
+      }
+      // Highlight "Night Shift" in blue
+      if (val === "Night Shift") {
+        cell.font = { size: 10, color: { argb: "FF1F4E78" }, bold: true };
+      }
+      // Highlight "Day Shift" in green
+      if (val === "Day Shift") {
+        cell.font = { size: 10, color: { argb: "FF375623" }, bold: true };
+      }
+    });
+    dataRow++;
+  });
+
+  // Column widths
+  const columnWidths = [25, 40, 15, 20, 12, 10, 10];
+  if (hasBreakColumns) {
+    columnWidths.push(10);
+    for (let i = 1; i <= maxBreaks; i++) {
+      columnWidths.push(12, 12);
+    }
+    columnWidths.push(10);
+  }
+  columnWidths.push(25); // Remarks
+  dataSheet.columns = columnWidths.map((w) => ({ width: w }));
+
+  // Auto-filter on header row
+  dataSheet.autoFilter = {
+    from: { row: 8, column: 1 },
+    to: { row: 8, column: headers.length },
+  };
+
+  // ===== SHEET 4: Original Data =====
   if (window.originalWorksheet) {
-    const originalWs = { ...window.originalWorksheet };
+    const origSheet = wb.addWorksheet("Original Data");
+    const originalData = XLSX.utils.sheet_to_json(window.originalWorksheet, {
+      header: 1,
+    });
 
-    // Auto-fit columns based on content
-    originalWs["!cols"] = [
-      { wch: 5 }, // ID
-      { wch: 25 }, // Name
-      { wch: 30 }, // Department
-      { wch: 12 }, // Date
-      { wch: 12 }, // Check-In Time
-      { wch: 20 }, // Card Swiping Type
+    originalData.forEach((row, rIdx) => {
+      (row || []).forEach((val, cIdx) => {
+        const cell = origSheet.getCell(rIdx + 1, cIdx + 1);
+        cell.value = val;
+        if (rIdx === 7) {
+          // Header row
+          cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FF305496" },
+          };
+        }
+      });
+    });
+
+    origSheet.columns = [
+      { width: 12 },
+      { width: 25 },
+      { width: 30 },
+      { width: 12 },
+      { width: 12 },
+      { width: 20 },
     ];
-
-    wb.SheetNames.push("Original Data");
-    wb.Sheets["Original Data"] = originalWs;
   }
 
-  XLSX.writeFile(wb, "attendance_data.xlsx");
-  showToast("📊 Data exported to Excel successfully!");
+  // ===== SAVE FILE =====
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  saveAs(blob, "attendance_data.xlsx");
+
+  showToast("📊 Data exported to Excel with styling successfully!");
 }
