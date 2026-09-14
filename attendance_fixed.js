@@ -1118,7 +1118,7 @@ async function exportToExcel() {
 
   // ===== SHEET 1: Attendance Pivot =====
   const pivotSheet = wb.addWorksheet("Attendance Pivot", {
-    views: [{ state: "frozen", ySplit: 8 }],
+    views: [{ state: "frozen", ySplit: 6 }],
   });
 
   // Company header (merged A1:G3)
