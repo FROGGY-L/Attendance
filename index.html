@@ -9,6 +9,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 
@@ -34,11 +36,11 @@
                     <div class="file-input-container">
                         <span id="fileName">No file selected</span>
                     </div>
-                    <button class="calculate-button" onclick="processFile()">
-                        <i class="fas fa-calculator"></i> Calculate
-                    </button>
                     <button class="export-button" onclick="exportToExcel()">
-                        <i class="fas fa-download"></i> Export
+                        <i class="fas fa-file-excel"></i> Export Excel
+                    </button>
+                    <button class="pdf-button" onclick="exportToPDF()">
+                        <i class="fas fa-file-pdf"></i> Export PDF
                     </button>
                     <button class="clear-button" onclick="clearFile()">
                         <i class="fas fa-trash-alt"></i> Clear
@@ -437,6 +439,7 @@
 
         .main-content.has-data .calculate-button,
         .main-content.has-data .export-button,
+        .main-content.has-data .pdf-button,
         .main-content.has-data .clear-button {
             padding: 8px 16px;
             font-size: 12px;
@@ -710,6 +713,7 @@
 
             .calculate-button,
             .export-button,
+            .pdf-button,
             .clear-button {
                 padding: 12px 24px;
                 font-size: 14px;
@@ -732,6 +736,25 @@
             background: linear-gradient(45deg, #3498db, #2980b9);
             color: white;
             box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+        }
+
+        .pdf-button {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            min-width: 120px;
+            background: linear-gradient(45deg, #c0392b, #e74c3c);
+            color: white;
+            box-shadow: 0 4px 15px rgba(192, 57, 43, 0.3);
+        }
+
+        .pdf-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(192, 57, 43, 0.4);
         }
 
         .export-button:hover {
@@ -918,6 +941,474 @@
             outline: none;
             border-color: #3498db;
             box-shadow: 0 0 10px rgba(52, 152, 219, 0.2);
+        }
+
+        /* ---------- Summary Cards ---------- */
+        #output .summary-cards {
+            display: grid !important;
+            grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+            gap: 12px !important;
+            margin: 0 0 18px 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+        }
+
+        #output .summary-card {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            gap: 12px !important;
+            padding: 14px 16px !important;
+            margin: 0 !important;
+            background: rgba(46, 46, 46, 0.06) !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            border-radius: 12px !important;
+            transition: all 0.25s ease !important;
+            text-align: left !important;
+            min-width: 0 !important;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+        }
+
+        #output .summary-card:hover {
+            transform: translateY(-2px) !important;
+            border-color: #4facfe !important;
+            box-shadow: 0 6px 16px rgba(79, 172, 254, 0.2) !important;
+        }
+
+        #output .summary-icon {
+            width: 42px !important;
+            height: 42px !important;
+            min-width: 42px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            border-radius: 10px !important;
+            background: linear-gradient(135deg, #4facfe, #00f2fe) !important;
+            color: #fff !important;
+            font-size: 1.1rem !important;
+            flex-shrink: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        #output .summary-info {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            justify-content: center !important;
+            gap: 2px !important;
+            min-width: 0 !important;
+            flex: 1 1 auto !important;
+        }
+
+        #output .summary-value {
+            font-size: 1.5rem !important;
+            font-weight: 700 !important;
+            color: #2c3e50 !important;
+            line-height: 1.1 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        #output .summary-label {
+            font-size: 0.72rem !important;
+            color: #555 !important;
+            opacity: 0.85 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.5px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            white-space: nowrap !important;
+            font-weight: 600 !important;
+        }
+
+        #output .summary-card.status-day .summary-icon {
+            background: linear-gradient(135deg, #27ae60, #2ecc71) !important;
+        }
+
+        #output .summary-card.status-night .summary-icon {
+            background: linear-gradient(135deg, #3f51b5, #1a237e) !important;
+        }
+
+        #output .summary-card.status-missing .summary-icon {
+            background: linear-gradient(135deg, #e74c3c, #c0392b) !important;
+        }
+
+        /* ---------- Preview toolbar ---------- */
+        #output .preview-toolbar {
+            background: rgba(46, 46, 46, 0.04) !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            border-radius: 12px !important;
+            padding: 12px 14px !important;
+            margin: 0 0 12px 0 !important;
+            width: 100% !important;
+        }
+
+        #output .toolbar-row {
+            display: flex !important;
+            gap: 12px !important;
+            align-items: center !important;
+            flex-wrap: wrap !important;
+            width: 100% !important;
+        }
+
+        #output .search-wrap {
+            position: relative !important;
+            flex: 1 1 260px !important;
+            min-width: 220px !important;
+            display: block !important;
+        }
+
+        #output .search-wrap i {
+            position: absolute !important;
+            top: 50% !important;
+            left: 12px !important;
+            transform: translateY(-50%) !important;
+            color: #888 !important;
+            opacity: 0.8 !important;
+            pointer-events: none !important;
+            font-size: 0.9rem !important;
+        }
+
+        #output .search-wrap input {
+            width: 100% !important;
+            padding: 10px 14px 10px 36px !important;
+            border-radius: 8px !important;
+            border: 1px solid #ddd !important;
+            background: #fff !important;
+            color: #333 !important;
+            font-size: 0.9rem !important;
+            transition: all 0.25s ease !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
+        }
+
+        #output .search-wrap input::placeholder {
+            color: #999 !important;
+            opacity: 1 !important;
+        }
+
+        #output .search-wrap input:focus {
+            outline: none !important;
+            border-color: #4facfe !important;
+            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.2) !important;
+        }
+
+        #output .filter-group {
+            display: flex !important;
+            gap: 8px !important;
+            flex-wrap: wrap !important;
+            align-items: center !important;
+        }
+
+        #output .filter-group select {
+            padding: 10px 12px !important;
+            border-radius: 8px !important;
+            border: 1px solid #ddd !important;
+            background: #fff !important;
+            color: #333 !important;
+            font-size: 0.85rem !important;
+            cursor: pointer !important;
+            max-width: 180px !important;
+            min-width: 130px !important;
+            transition: all 0.2s ease !important;
+        }
+
+        #output .filter-group select:focus {
+            outline: none !important;
+            border-color: #4facfe !important;
+            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.2) !important;
+        }
+
+        #output .clear-filters-btn {
+            width: 40px !important;
+            height: 40px !important;
+            min-width: 40px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            border-radius: 8px !important;
+            border: 1px solid #f5c6c6 !important;
+            background: rgba(231, 76, 60, 0.1) !important;
+            color: #e74c3c !important;
+            cursor: pointer !important;
+            padding: 0 !important;
+        }
+
+        #output .clear-filters-btn:hover {
+            background: rgba(231, 76, 60, 0.25) !important;
+            border-color: #e74c3c !important;
+        }
+
+        #output .toolbar-info {
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            margin: 10px 0 0 0 !important;
+            font-size: 0.8rem !important;
+            color: #555 !important;
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+        }
+
+        #output .toolbar-hint {
+            opacity: 0.7 !important;
+            font-style: italic !important;
+        }
+
+        /* ---------- Table ---------- */
+        #output .table-container {
+            border-radius: 12px !important;
+            overflow: auto !important;
+            max-height: 480px !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            background: #fff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+        }
+
+        #output table.preview-table {
+            width: 100% !important;
+            min-width: 900px !important;
+            border-collapse: separate !important;
+            border-spacing: 0 !important;
+            margin: 0 !important;
+            background: #fff !important;
+        }
+
+        #output table.preview-table th {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 5 !important;
+            background: linear-gradient(45deg, #3498db, #2980b9) !important;
+            color: #fff !important;
+            font-size: 0.78rem !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.4px !important;
+            padding: 12px 10px !important;
+            text-align: center !important;
+            white-space: nowrap !important;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1) !important;
+            user-select: none !important;
+        }
+
+        #output table.preview-table th.sortable {
+            cursor: pointer !important;
+        }
+
+        #output table.preview-table th.sortable:hover {
+            background: linear-gradient(45deg, #2980b9, #1c5980) !important;
+        }
+
+        #output table.preview-table th .sort-icon {
+            font-size: 0.7rem !important;
+            opacity: 0.5 !important;
+            margin-left: 4px !important;
+        }
+
+        #output table.preview-table th.sortable:hover .sort-icon {
+            opacity: 1 !important;
+        }
+
+        #output table.preview-table td {
+            padding: 10px 12px !important;
+            font-size: 0.85rem !important;
+            border-bottom: 1px solid #eef1f5 !important;
+            color: #333 !important;
+            text-align: center !important;
+            white-space: nowrap !important;
+            background: #fff !important;
+        }
+
+        #output table.preview-table tr.group-even td {
+            background: #fafbfd !important;
+        }
+
+        #output table.preview-table tr.group-odd td {
+            background: #fff !important;
+        }
+
+        #output table.preview-table tr:hover td {
+            background: #eef6ff !important;
+        }
+
+        #output .cell-employee {
+            font-weight: 600 !important;
+            color: #2c3e50 !important;
+            text-align: left !important;
+            padding-left: 16px !important;
+        }
+
+        #output .cell-department {
+            font-size: 0.78rem !important;
+            opacity: 0.85 !important;
+            text-align: left !important;
+            max-width: 220px !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+        }
+
+        #output .cell-duration {
+            font-weight: 600 !important;
+            font-family: 'Consolas', 'Monaco', monospace !important;
+        }
+
+        #output .cell-date {
+            font-family: 'Consolas', 'Monaco', monospace !important;
+            font-size: 0.8rem !important;
+        }
+
+        #output .cell-remarks {
+            text-align: left !important;
+            font-size: 0.78rem !important;
+            opacity: 0.9 !important;
+            max-width: 220px !important;
+        }
+
+        /* ---------- Status badges ---------- */
+        #output .status-badge {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 5px !important;
+            padding: 4px 10px !important;
+            border-radius: 12px !important;
+            font-size: 0.75rem !important;
+            font-weight: 600 !important;
+            white-space: nowrap !important;
+        }
+
+        #output .badge-day {
+            background: rgba(39, 174, 96, 0.12) !important;
+            color: #1e8449 !important;
+            border: 1px solid rgba(39, 174, 96, 0.4) !important;
+        }
+
+        #output .badge-night {
+            background: rgba(63, 81, 181, 0.12) !important;
+            color: #2c3e91 !important;
+            border: 1px solid rgba(63, 81, 181, 0.4) !important;
+        }
+
+        #output .badge-morning {
+            background: rgba(243, 156, 18, 0.12) !important;
+            color: #b9770e !important;
+            border: 1px solid rgba(243, 156, 18, 0.4) !important;
+        }
+
+        #output .badge-missing {
+            background: rgba(231, 76, 60, 0.12) !important;
+            color: #b03a2e !important;
+            border: 1px solid rgba(231, 76, 60, 0.45) !important;
+        }
+
+        #output .badge-default {
+            background: rgba(150, 150, 150, 0.12) !important;
+            color: #555 !important;
+            border: 1px solid rgba(150, 150, 150, 0.3) !important;
+        }
+
+        #output .missing-badge {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+            padding: 3px 8px !important;
+            border-radius: 8px !important;
+            background: rgba(231, 76, 60, 0.12) !important;
+            color: #b03a2e !important;
+            font-size: 0.72rem !important;
+            font-weight: 600 !important;
+        }
+
+        /* ---------- Empty state ---------- */
+        #output .empty-state {
+            text-align: center !important;
+            padding: 60px 20px !important;
+            color: #555 !important;
+        }
+
+        #output .empty-state i {
+            font-size: 3rem !important;
+            color: #4facfe !important;
+            opacity: 0.6 !important;
+            margin-bottom: 12px !important;
+        }
+
+        #output .empty-state h3 {
+            margin: 0 0 6px 0 !important;
+            color: #2c3e50 !important;
+            font-size: 1.2rem !important;
+        }
+
+        #output .empty-state p {
+            margin: 0 !important;
+            opacity: 0.75 !important;
+            font-size: 0.9rem !important;
+        }
+
+        /* ---------- Responsive ---------- */
+        @media (max-width: 992px) {
+            #output .summary-cards {
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            }
+        }
+
+        @media (max-width: 768px) {
+            #output .summary-cards {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 10px !important;
+            }
+
+            #output .summary-card {
+                padding: 10px 12px !important;
+                gap: 8px !important;
+            }
+
+            #output .summary-icon {
+                width: 36px !important;
+                height: 36px !important;
+                min-width: 36px !important;
+                font-size: 0.95rem !important;
+            }
+
+            #output .summary-value {
+                font-size: 1.25rem !important;
+            }
+
+            #output .summary-label {
+                font-size: 0.68rem !important;
+            }
+
+            #output .toolbar-row {
+                flex-direction: column !important;
+                align-items: stretch !important;
+            }
+
+            #output .search-wrap {
+                min-width: 100% !important;
+                flex: 1 1 auto !important;
+            }
+
+            #output .filter-group {
+                justify-content: space-between !important;
+                width: 100% !important;
+            }
+
+            #output .filter-group select {
+                flex: 1 1 auto !important;
+                max-width: none !important;
+                min-width: 0 !important;
+            }
+
+            #output .toolbar-hint {
+                display: none !important;
+            }
+        }
+
+        @media (max-width: 480px) {
+            #output .summary-cards {
+                grid-template-columns: 1fr !important;
+            }
         }
     </style>
     <script src="attendance_fixed.js"></script>
