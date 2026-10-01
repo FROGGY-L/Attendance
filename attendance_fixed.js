@@ -521,6 +521,30 @@ function analyzeData(data) {
     });
   });
 
+  // Store raw swipe records for PCI/PHILIPS-CARBON export
+  window.rawSwipeRecords = [];
+  Object.entries(employeeRecords).forEach(([id, emp]) => {
+    const dept = emp.department || "";
+    const isPCI = dept.toUpperCase().includes("PCI") || dept.toUpperCase().includes("PHILIPS-CARBON") || dept.toUpperCase().includes("PHILIPS CARBON");
+    if (isPCI) {
+      emp.records.forEach(r => {
+        let exportDate = r.date;
+        if (r.date && r.date.includes("-")) {
+          const [dd, mm, yyyy] = r.date.split("-");
+          if (dd && mm && yyyy) exportDate = `${mm}/${dd}/${yyyy}`;
+        }
+        window.rawSwipeRecords.push({
+          id,
+          name: emp.name,
+          department: emp.department,
+          date: exportDate,
+          time: r.time,
+          type: r.type
+        });
+      });
+    }
+  });
+
   console.log("Employees grouped:", Object.keys(employeeRecords).length);
 
   // Sort + dedupe
@@ -1298,6 +1322,13 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 });
 
+// ---------- PCI/PHILIPS-CARBON detection ----------
+function isPCIDepartment(dept) {
+  if (!dept) return false;
+  const d = dept.toUpperCase();
+  return d.includes("PCI") || d.includes("PHILIPS-CARBON") || d.includes("PHILIPS CARBON");
+}
+
 // ============================================================
 // EXPORT EXCEL — Enhanced with Summary sheet
 // ============================================================
@@ -1922,7 +1953,50 @@ async function exportToExcel() {
   pivotSheet.columns = Array(7).fill({ width: 15 });
 
   // ============================================================
-  // SHEET 3: Attendance Data (existing, enhanced)
+  // SHEET 3: Time-Logs (PCI / PHILIPS-CARBON flat format)
+  // ============================================================
+  const pciRaw = (window.rawSwipeRecords || []);
+  if (pciRaw.length > 0) {
+    const pciSheet = wb.addWorksheet("Time-Logs", {
+      properties: { tabColor: { argb: "FFED7D31" } },
+      views: [{ state: "frozen", ySplit: 2 }],
+    });
+
+    pciSheet.mergeCells(1, 1, 1, 5);
+    const ph = pciSheet.getCell("A1");
+    ph.value = "PCI / PHILIPS-CARBON TIME LOGS";
+    ph.font = { bold: true, size: 14, color: { argb: "FF1F4E78" } };
+    ph.alignment = { horizontal: "center", vertical: "middle" };
+    ph.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFCE4D6" } };
+
+    const pciHeaders = ["Employee ID", "Name", "Date", "Time", "Time Logs Type"];
+    pciHeaders.forEach((h, i) => {
+      const c = pciSheet.getCell(2, i + 1);
+      c.value = h;
+      c.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFED7D31" } };
+      c.alignment = { horizontal: "center", vertical: "middle" };
+      c.border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
+    });
+
+    pciRaw.sort((a, b) => a.name.localeCompare(b.name) || a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+
+    pciRaw.forEach((rec, ri) => {
+      const vals = [rec.id, rec.name, rec.date, rec.time, rec.type];
+      vals.forEach((v, ci) => {
+        const c = pciSheet.getCell(ri + 3, ci + 1);
+        c.value = v;
+        c.alignment = { horizontal: ci === 1 ? "left" : "center", vertical: "middle" };
+        c.border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
+      });
+    });
+
+    pciSheet.columns = [{ width: 15 }, { width: 30 }, { width: 15 }, { width: 12 }, { width: 18 }];
+    pciSheet.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 5 } };
+  }
+
+  // ============================================================
+  // SHEET 4: Attendance Data (existing, enhanced)
   // ============================================================
   const ds = wb.addWorksheet("Attendance Data", {
     views: [{ state: "frozen", ySplit: 8 }],
@@ -2506,6 +2580,57 @@ async function exportToPDF() {
 
       yPos = doc.lastAutoTable.finalY + 14;
     });
+
+    // ============================================================
+    // PCI / PHILIPS-CARBON TIME LOGS PAGE
+    // ============================================================
+    const pciRaw = (window.rawSwipeRecords || []);
+    if (pciRaw.length > 0) {
+      doc.addPage("a4", "landscape");
+      yPos = drawBanner("PCI / PHILIPS-CARBON Time Logs");
+
+      const pciSorted = [...pciRaw].sort((a, b) => a.name.localeCompare(b.name) || a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+
+      doc.autoTable({
+        head: [["Employee ID", "Name", "Date", "Time", "Time Logs Type"]],
+        body: pciSorted.map(r => [r.id, r.name, r.date, r.time, r.type]),
+        startY: yPos,
+        margin: { left: margin, right: margin },
+        theme: "grid",
+        styles: {
+          font: "helvetica",
+          fontSize: 9,
+          cellPadding: 4,
+          textColor: COLORS.black,
+          lineColor: [180, 180, 180],
+          lineWidth: 0.4,
+          valign: "middle",
+        },
+        headStyles: {
+          fillColor: [237, 125, 49],
+          textColor: COLORS.white,
+          fontStyle: "bold",
+          halign: "center",
+          fontSize: 9,
+        },
+        columnStyles: {
+          0: { halign: "center", cellWidth: 70 },
+          1: { halign: "left", cellWidth: 160 },
+          2: { halign: "center", cellWidth: 90 },
+          3: { halign: "center", cellWidth: 70 },
+          4: { halign: "center" },
+        },
+        alternateRowStyles: { fillColor: [255, 243, 235] },
+        didParseCell: function(data) {
+          if (data.section === "body" && data.column.index === 4) {
+            const v = String(data.cell.raw || "").toLowerCase();
+            if (v.includes("check in")) data.cell.styles.textColor = COLORS.dayGreen;
+            else if (v.includes("check out")) data.cell.styles.textColor = COLORS.missingRed;
+          }
+        },
+      });
+      yPos = doc.lastAutoTable.finalY + 14;
+    }
 
     // ============================================================
     // LAST PAGE: SIGNATURE BLOCK + FOOTER
