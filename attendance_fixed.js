@@ -1962,14 +1962,14 @@ async function exportToExcel() {
       views: [{ state: "frozen", ySplit: 2 }],
     });
 
-    pciSheet.mergeCells(1, 1, 1, 5);
+    pciSheet.mergeCells(1, 1, 1, 4);
     const ph = pciSheet.getCell("A1");
     ph.value = "PCI / PHILIPS-CARBON TIME LOGS";
     ph.font = { bold: true, size: 14, color: { argb: "FF1F4E78" } };
     ph.alignment = { horizontal: "center", vertical: "middle" };
     ph.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFCE4D6" } };
 
-    const pciHeaders = ["Employee ID", "Name", "Date", "Time", "Time Logs Type"];
+    const pciHeaders = ["Employee ID", "Name", "Date & Time", "Time Logs Type"];
     pciHeaders.forEach((h, i) => {
       const c = pciSheet.getCell(2, i + 1);
       c.value = h;
@@ -1982,7 +1982,7 @@ async function exportToExcel() {
     pciRaw.sort((a, b) => a.name.localeCompare(b.name) || a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
 
     pciRaw.forEach((rec, ri) => {
-      const vals = [rec.id, rec.name, rec.date, rec.time, rec.type];
+      const vals = [rec.id, rec.name, `${rec.date} ${rec.time}`, rec.type];
       vals.forEach((v, ci) => {
         const c = pciSheet.getCell(ri + 3, ci + 1);
         c.value = v;
@@ -1991,8 +1991,8 @@ async function exportToExcel() {
       });
     });
 
-    pciSheet.columns = [{ width: 15 }, { width: 30 }, { width: 15 }, { width: 12 }, { width: 18 }];
-    pciSheet.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 5 } };
+    pciSheet.columns = [{ width: 15 }, { width: 30 }, { width: 22 }, { width: 18 }];
+    pciSheet.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 4 } };
   }
 
   // ============================================================
@@ -2592,8 +2592,8 @@ async function exportToPDF() {
       const pciSorted = [...pciRaw].sort((a, b) => a.name.localeCompare(b.name) || a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
 
       doc.autoTable({
-        head: [["Employee ID", "Name", "Date", "Time", "Time Logs Type"]],
-        body: pciSorted.map(r => [r.id, r.name, r.date, r.time, r.type]),
+        head: [["Employee ID", "Name", "Date & Time", "Time Logs Type"]],
+        body: pciSorted.map(r => [r.id, r.name, `${r.date} ${r.time}`, r.type]),
         startY: yPos,
         margin: { left: margin, right: margin },
         theme: "grid",
@@ -2616,13 +2616,12 @@ async function exportToPDF() {
         columnStyles: {
           0: { halign: "center", cellWidth: 70 },
           1: { halign: "left", cellWidth: 160 },
-          2: { halign: "center", cellWidth: 90 },
-          3: { halign: "center", cellWidth: 70 },
-          4: { halign: "center" },
+          2: { halign: "center", cellWidth: 130 },
+          3: { halign: "center" },
         },
         alternateRowStyles: { fillColor: [255, 243, 235] },
         didParseCell: function(data) {
-          if (data.section === "body" && data.column.index === 4) {
+          if (data.section === "body" && data.column.index === 3) {
             const v = String(data.cell.raw || "").toLowerCase();
             if (v.includes("check in")) data.cell.styles.textColor = COLORS.dayGreen;
             else if (v.includes("check out")) data.cell.styles.textColor = COLORS.missingRed;
