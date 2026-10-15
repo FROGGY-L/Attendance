@@ -55,7 +55,7 @@
     <footer>
         <div class="footer-content">
             <div class="footer-left">
-                <p>&copy; <span id="current-year"></span> KFL Manpower Corporation. All rights reserved. ©TeamFroggy</p>
+                <p>&copy; <span id="current-year"></span> KFL Manpower Corporation. All rights reserved.</p>
                 <script>
                     document.getElementById("current-year").textContent = new Date().getFullYear();
                 </script>
@@ -69,8 +69,8 @@
             </div>
         </div>
         <div class="footer-social">
-            <a href="https://www.facebook.com/kflmanpoweracorporationofficialpage" target="_blank" class="social-icon"><i
-                    class="fab fa-facebook-f"></i></a>
+            <a href="https://www.facebook.com/kflmanpoweracorporationofficialpage" target="_blank"
+                class="social-icon"><i class="fab fa-facebook-f"></i></a>
             <a href="https://twitter.com" target="_blank" class="social-icon"><i class="fab fa-twitter"></i></a>
             <a href="https://google.com" target="_blank" class="social-icon"><i class="fab fa-google"></i></a>
             <a href="https://linkedin.com" target="_blank" class="social-icon"><i class="fab fa-linkedin-in"></i></a>
@@ -455,30 +455,6 @@
             position: relative;
             overflow: hidden;
             border-radius: 50px 50px 0 0;
-        }
-
-        footer::after {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 150px;
-            height: 150px;
-            background: url('logo.png') center/contain no-repeat;
-            transform: translate(-50%, -50%);
-            opacity: 0.3;
-            animation: logoRotate 10s linear infinite;
-            z-index: 0;
-        }
-
-        @keyframes logoRotate {
-            from {
-                transform: translate(-50%, -50%) rotate(0deg);
-            }
-
-            to {
-                transform: translate(-50%, -50%) rotate(360deg);
-            }
         }
 
         footer::before {
