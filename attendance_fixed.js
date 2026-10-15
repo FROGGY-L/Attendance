@@ -421,6 +421,7 @@ function analyzeData(data) {
 
   // Reset max breaks for each new analysis
   window.maxBreaksFound = 0;
+  window.hasBreakRecords = false;
 
   data.forEach((record, idx) => {
     // --- ID ---
@@ -509,6 +510,10 @@ function analyzeData(data) {
               ? "Break Out"
               : type;
 
+    if (normalizedType === "Break In" || normalizedType === "Break Out") {
+      window.hasBreakRecords = true;
+    }
+
     if (!employeeRecords[id]) {
       employeeRecords[id] = { name, department, records: [] };
     }
@@ -525,9 +530,12 @@ function analyzeData(data) {
   window.rawSwipeRecords = [];
   Object.entries(employeeRecords).forEach(([id, emp]) => {
     const dept = emp.department || "";
-    const isPCI = dept.toUpperCase().includes("PCI") || dept.toUpperCase().includes("PHILIPS-CARBON") || dept.toUpperCase().includes("PHILIPS CARBON");
+    const isPCI =
+      dept.toUpperCase().includes("PCI") ||
+      dept.toUpperCase().includes("PHILIPS-CARBON") ||
+      dept.toUpperCase().includes("PHILIPS CARBON");
     if (isPCI) {
-      emp.records.forEach(r => {
+      emp.records.forEach((r) => {
         let exportDate = r.date;
         if (r.date && r.date.includes("-")) {
           const [dd, mm, yyyy] = r.date.split("-");
@@ -539,7 +547,7 @@ function analyzeData(data) {
           department: emp.department,
           date: exportDate,
           time: r.time,
-          type: r.type
+          type: r.type,
         });
       });
     }
@@ -563,11 +571,6 @@ function analyzeData(data) {
   Object.entries(employeeRecords).forEach(([id, emp]) => {
     const usedRecords = new Set();
     const processedDates = new Set();
-
-    const isSanteh =
-      emp.department && emp.department.toUpperCase().includes("SANTEH");
-    const isKflStaff =
-      emp.department && emp.department.toUpperCase().includes("KFL-STAFF");
 
     for (let i = 0; i < emp.records.length; i++) {
       const record = emp.records[i];
@@ -639,7 +642,8 @@ function analyzeData(data) {
 
         const breakTimes = {};
 
-        if (isSanteh || isKflStaff) {
+        if (window.hasBreakRecords) {
+          const isSanteh = emp.department && emp.department.toUpperCase().includes("SANTEH");
           const breakRecords = [];
           for (let k = i + 1; k < bestCheckoutIndex; k++) {
             const br = emp.records[k];
@@ -649,57 +653,21 @@ function analyzeData(data) {
           }
           breakRecords.sort((a, b) => a.dateTime - b.dateTime);
 
+          let pairIdx = 1;
+          for (let b = 0; b < breakRecords.length - 1; b++) {
+            if (
+              breakRecords[b].type === "Break In" &&
+              breakRecords[b + 1].type === "Break Out"
+            ) {
+              if (pairIdx > 1 && !isSanteh) break; // only 1st break for non-SANTEH
+              breakTimes[`BreakIn${pairIdx}`] = breakRecords[b].time;
+              breakTimes[`BreakOut${pairIdx}`] = breakRecords[b + 1].time;
+              pairIdx++;
+              b++;
+            }
+          }
           if (isSanteh) {
-            let pairIdx = 1;
-            for (let b = 0; b < breakRecords.length - 1; b++) {
-              if (
-                breakRecords[b].type === "Break In" &&
-                breakRecords[b + 1].type === "Break Out"
-              ) {
-                breakTimes[`BreakIn${pairIdx}`] = breakRecords[b].time;
-                breakTimes[`BreakOut${pairIdx}`] = breakRecords[b + 1].time;
-                pairIdx++;
-                b++;
-              }
-            }
-            window.maxBreaksFound = Math.max(
-              window.maxBreaksFound,
-              pairIdx - 1,
-            );
-          } else {
-            // KFL-STAFF: only noon break
-            if (breakRecords.length >= 2) {
-              const first = breakRecords[0];
-              const fh = first.dateTime.getHours();
-              if (fh >= 11 && fh <= 14) {
-                for (let b = 1; b < breakRecords.length; b++) {
-                  const second = breakRecords[b];
-                  const sh = second.dateTime.getHours();
-                  if (sh >= 11 && sh <= 14) {
-                    if (first.dateTime < second.dateTime) {
-                      breakTimes["BreakIn1"] = first.time;
-                      breakTimes["BreakOut1"] = second.time;
-                    } else {
-                      breakTimes["BreakIn1"] = second.time;
-                      breakTimes["BreakOut1"] = first.time;
-                    }
-                    break;
-                  }
-                }
-              }
-            }
-            if (!breakTimes["BreakIn1"]) {
-              for (let b = 0; b < breakRecords.length - 1; b++) {
-                if (
-                  breakRecords[b].type === "Break In" &&
-                  breakRecords[b + 1].type === "Break Out"
-                ) {
-                  breakTimes["BreakIn1"] = breakRecords[b].time;
-                  breakTimes["BreakOut1"] = breakRecords[b + 1].time;
-                  break;
-                }
-              }
-            }
+            window.maxBreaksFound = Math.max(window.maxBreaksFound, pairIdx - 1);
           }
         }
 
@@ -749,14 +717,13 @@ function analyzeData(data) {
           Remarks: finalRemarks,
         };
 
-        if (isSanteh) {
-          for (let i = 1; i <= (window.maxBreaksFound || 2); i++) {
-            resultRecord[`BreakIn${i}`] = breakTimes[`BreakIn${i}`] || "-";
-            resultRecord[`BreakOut${i}`] = breakTimes[`BreakOut${i}`] || "-";
+        if (window.hasBreakRecords) {
+          const isSanteh = emp.department && emp.department.toUpperCase().includes("SANTEH");
+          const maxPairs = isSanteh ? (window.maxBreaksFound || 1) : 1;
+          for (let bi = 1; bi <= maxPairs; bi++) {
+            resultRecord[`BreakIn${bi}`] = breakTimes[`BreakIn${bi}`] || "-";
+            resultRecord[`BreakOut${bi}`] = breakTimes[`BreakOut${bi}`] || "-";
           }
-        } else if (isKflStaff) {
-          resultRecord["BreakIn1"] = breakTimes["BreakIn1"] || "-";
-          resultRecord["BreakOut1"] = breakTimes["BreakOut1"] || "-";
         }
 
         results.push(resultRecord);
@@ -851,13 +818,9 @@ function displayResults(results) {
     return parseDate(a.Date) - parseDate(b.Date);
   });
 
-  const hasSanteh = results.some(
-    (r) => r.Department && r.Department.toUpperCase().includes("SANTEH"),
-  );
-  const hasKflStaff = results.some(
-    (r) => r.Department && r.Department.toUpperCase().includes("KFL-STAFF"),
-  );
-  const hasBreak = hasSanteh || hasKflStaff;
+  const hasBreak = !!window.hasBreakRecords;
+  const hasSanteh = hasBreak;
+  const hasKflStaff = false;
 
   // Build headers
   let headers;
@@ -870,17 +833,12 @@ function displayResults(results) {
       { key: "Date", label: "Date" },
       { key: "CheckIn", label: "Check In" },
     ];
-    if (hasSanteh) {
-      const mb = window.maxBreaksFound || 2;
-      for (let i = 1; i <= mb; i++) {
-        const ord =
-          i === 1 ? "1st" : i === 2 ? "2nd" : i === 3 ? "3rd" : `${i}th`;
-        headers.push({ key: `BreakIn${i}`, label: `${ord} Break In` });
-        headers.push({ key: `BreakOut${i}`, label: `${ord} Break Out` });
-      }
-    } else {
-      headers.push({ key: "BreakIn1", label: "Noon Break In" });
-      headers.push({ key: "BreakOut1", label: "Noon Break Out" });
+    const mb = window.maxBreaksFound || 1;
+    const hasSantehResult = results.some(r => r.Department && r.Department.toUpperCase().includes("SANTEH"));
+    for (let i = 1; i <= mb; i++) {
+      const ord = hasSantehResult ? (i === 1 ? "1st" : i === 2 ? "2nd" : i === 3 ? "3rd" : `${i}th`) + " " : "";
+      headers.push({ key: `BreakIn${i}`, label: `${ord}Break In` });
+      headers.push({ key: `BreakOut${i}`, label: `${ord}Break Out` });
     }
     headers.push({ key: "CheckOut", label: "Check Out" });
     headers.push({ key: "Remarks", label: "Remarks" });
@@ -1228,90 +1186,169 @@ function showToast(message) {
 }
 
 function showToastMessage() {
-  const msg = `
-    <strong>Important Notice:</strong><br><br>
-    Please double-check the file provided by the system.<br><br>
-    <strong>Update 09-14-2026:</strong><br>
-    - Fixed missing checkout for long shifts.<br>
-    - Added support for <em>ID / Last Name / First Name / Department</em> format.<br>
-    - Auto-calculate on file upload.<br>
-    <strong>* Always double-check the data.</strong><br><br>
-    For inquiries, contact IT Personnel.<br><br>
-    <strong>Thank you!</strong>
-  `;
+  const updates = [
+    { date: "10-15-2026", tag: "latest", items: [
+      "Auto-detect Break In/Out records from uploaded file.",
+      "Break columns shown for all employees when file has break records.",
+      "SANTEH department shows multiple break pairs; others show one Break In/Out.",
+      "Ordinal prefix (1st, 2nd\u2026) on break columns only for SANTEH employees.",
+      "Fixed Excel and PDF exports not including Break In/Out times.",
+    ]},
+    { date: "09-14-2026", tag: "fix", items: [
+      "Fixed missing checkout for long shifts.",
+      "Added support for ID / Last Name / First Name / Department format.",
+      "Auto-calculate on file upload.",
+    ]},
+    { date: "04-30-2025", tag: "fix", items: ["Added missing check-in detection."] },
+    { date: "04-24-2025", tag: "fix", items: ["Fixed night shift and morning shift; added mid-shift calculation."] },
+    { date: "04-16-2025", tag: "fix", items: ["Ensure check-out from next day is included even if reused for night shift."] },
+    { date: "04-08-2025", tag: "fix", items: ["Fixed issues on night shift."] },
+  ];
 
-  const backdrop = document.createElement("div");
-  Object.assign(backdrop.style, {
-    position: "fixed",
-    top: "0",
-    left: "0",
-    width: "100%",
-    height: "100%",
-    backgroundColor: "rgba(0,0,0,0.5)",
-    zIndex: "9998",
-    opacity: "0",
-    transition: "opacity 0.3s ease",
-  });
+  const tagColors = {
+    latest: { bg: "#22c55e", text: "#fff" },
+    fix:    { bg: "#3b82f6", text: "#fff" },
+  };
 
-  const toast = document.createElement("div");
-  toast.innerHTML = msg;
-  Object.assign(toast.style, {
-    position: "fixed",
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%) scale(0.7)",
-    padding: "25px 35px",
-    background: "linear-gradient(135deg, #f44336, #e53935)",
-    color: "#fff",
-    borderRadius: "15px",
-    fontSize: "16px",
-    textAlign: "center",
-    zIndex: "9999",
-    lineHeight: "1.6",
-    maxWidth: "90vw",
-    maxHeight: "80vh",
-    overflowY: "auto",
-    boxShadow: "0 20px 60px rgba(244,67,54,0.3)",
-    transition: "all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55)",
-    opacity: "0",
-  });
+  const changelogHTML = updates.map(u => {
+    const tc = tagColors[u.tag] || { bg: "#6b7280", text: "#fff" };
+    const badge = `<span style="display:inline-block;padding:1px 8px;border-radius:20px;font-size:10px;font-weight:700;background:${tc.bg};color:${tc.text};text-transform:uppercase;letter-spacing:.5px;margin-left:8px;vertical-align:middle">${u.tag}</span>`;
+    const items = u.items.map(i => `<li style="margin:3px 0;color:#374151">&#8226; ${i}</li>`).join("");
+    return `
+      <div style="margin-bottom:14px;padding:12px 14px;background:#f9fafb;border-radius:10px;border-left:3px solid ${tc.bg}">
+        <div style="font-weight:700;font-size:13px;color:#1f2937;margin-bottom:6px">${u.date}${badge}</div>
+        <ul style="margin:0;padding:0;list-style:none;font-size:13px;line-height:1.6">${items}</ul>
+      </div>`;
+  }).join("");
 
-  const closeBtn = document.createElement("button");
-  closeBtn.innerHTML = "×";
-  Object.assign(closeBtn.style, {
-    position: "absolute",
-    top: "10px",
-    right: "15px",
-    background: "none",
-    border: "none",
-    color: "white",
-    fontSize: "24px",
-    cursor: "pointer",
-  });
-  closeBtn.onclick = closeModal;
-  toast.appendChild(closeBtn);
+  const AUTO_CLOSE_MS = 12000;
 
-  document.body.appendChild(backdrop);
-  document.body.appendChild(toast);
-
-  setTimeout(() => {
-    backdrop.style.opacity = "1";
-    toast.style.transform = "translate(-50%, -50%) scale(1)";
-    toast.style.opacity = "1";
-  }, 10);
-
-  function closeModal() {
-    toast.style.transform = "translate(-50%, -50%) scale(0.7)";
-    toast.style.opacity = "0";
-    backdrop.style.opacity = "0";
-    setTimeout(() => {
-      toast.remove();
-      backdrop.remove();
-    }, 400);
+  // --- Inject styles ---
+  const styleId = "kfl-notice-style";
+  if (!document.getElementById(styleId)) {
+    const s = document.createElement("style");
+    s.id = styleId;
+    s.textContent = `
+      #kflNoticeBackdrop { position:fixed;inset:0;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);z-index:9998;opacity:0;transition:opacity .3s ease; }
+      #kflNoticeModal {
+        position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.92);z-index:9999;
+        width:min(520px,92vw);max-height:88vh;display:flex;flex-direction:column;
+        background:#fff;border-radius:18px;box-shadow:0 24px 64px rgba(0,0,0,.22);
+        opacity:0;transition:opacity .35s ease,transform .35s cubic-bezier(.34,1.56,.64,1);
+        overflow:hidden;
+      }
+      #kflNoticeModal.kfl-open { opacity:1;transform:translate(-50%,-50%) scale(1); }
+      #kflNoticeBackdrop.kfl-open { opacity:1; }
+      .kfl-modal-header {
+        padding:20px 22px 16px;background:linear-gradient(135deg,#1e3a5f,#2563eb);
+        color:#fff;flex-shrink:0;
+      }
+      .kfl-modal-header h2 { margin:0 0 4px;font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px; }
+      .kfl-modal-header p  { margin:0;font-size:12.5px;opacity:.82; }
+      .kfl-progress-bar {
+        height:3px;background:rgba(255,255,255,.25);margin-top:14px;border-radius:2px;overflow:hidden;
+      }
+      .kfl-progress-fill {
+        height:100%;background:#fff;border-radius:2px;width:100%;
+        transition:width linear;
+      }
+      .kfl-modal-body { padding:18px 20px;overflow-y:auto;flex:1;min-height:0; }
+      .kfl-notice-banner {
+        display:flex;align-items:flex-start;gap:10px;padding:11px 14px;
+        background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;margin-bottom:16px;
+        font-size:13px;color:#92400e;line-height:1.5;
+      }
+      .kfl-notice-banner span { font-size:18px;flex-shrink:0;margin-top:1px; }
+      .kfl-changelog-title { font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px; }
+      .kfl-modal-footer {
+        padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;
+        align-items:center;justify-content:space-between;flex-shrink:0;background:#fafafa;
+      }
+      .kfl-modal-footer small { font-size:11.5px;color:#9ca3af; }
+      .kfl-dismiss-btn {
+        padding:8px 22px;background:linear-gradient(135deg,#1e3a5f,#2563eb);color:#fff;
+        border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;
+        transition:opacity .2s;
+      }
+      .kfl-dismiss-btn:hover { opacity:.88; }
+      #kflNoticeModal .kfl-close-x {
+        position:absolute;top:14px;right:16px;background:rgba(255,255,255,.18);
+        border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:16px;
+        cursor:pointer;display:flex;align-items:center;justify-content:center;
+        transition:background .2s;
+      }
+      #kflNoticeModal .kfl-close-x:hover { background:rgba(255,255,255,.32); }
+    `;
+    document.head.appendChild(s);
   }
 
-  setTimeout(closeModal, 8000);
-  backdrop.onclick = closeModal;
+  // --- Build DOM ---
+  const backdrop = document.createElement("div");
+  backdrop.id = "kflNoticeBackdrop";
+
+  const modal = document.createElement("div");
+  modal.id = "kflNoticeModal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-label", "Important Notice");
+  modal.innerHTML = `
+    <div class="kfl-modal-header" style="position:relative">
+      <button class="kfl-close-x" aria-label="Close">&times;</button>
+      <h2>&#128276; Important Notice</h2>
+      <p>KFL Attendance Calculator &mdash; Please double-check all exported data.</p>
+      <div class="kfl-progress-bar"><div class="kfl-progress-fill" id="kflProgressFill"></div></div>
+    </div>
+    <div class="kfl-modal-body">
+      <div class="kfl-notice-banner">
+        <span>&#9888;&#65039;</span>
+        <div>Always verify the output against the original file before submitting. For inquiries, contact IT Personnel.</div>
+      </div>
+      <div class="kfl-changelog-title">&#128196; Changelog</div>
+      ${changelogHTML}
+    </div>
+    <div class="kfl-modal-footer">
+      <small>Auto-closes in <span id="kflCountdown">12</span>s</small>
+      <button class="kfl-dismiss-btn" id="kflDismissBtn">Got it, thanks!</button>
+    </div>
+  `;
+
+  document.body.appendChild(backdrop);
+  document.body.appendChild(modal);
+
+  // --- Animate in ---
+  requestAnimationFrame(() => {
+    backdrop.classList.add("kfl-open");
+    modal.classList.add("kfl-open");
+  });
+
+  // --- Progress bar ---
+  const fill = document.getElementById("kflProgressFill");
+  const countdown = document.getElementById("kflCountdown");
+  fill.style.transitionDuration = AUTO_CLOSE_MS + "ms";
+  requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = "0%"; }));
+
+  let remaining = AUTO_CLOSE_MS / 1000;
+  const ticker = setInterval(() => {
+    remaining--;
+    if (countdown) countdown.textContent = remaining;
+  }, 1000);
+
+  // --- Close logic ---
+  function closeModal() {
+    clearInterval(ticker);
+    modal.classList.remove("kfl-open");
+    backdrop.classList.remove("kfl-open");
+    setTimeout(() => { modal.remove(); backdrop.remove(); }, 380);
+  }
+
+  const autoTimer = setTimeout(closeModal, AUTO_CLOSE_MS);
+
+  document.getElementById("kflDismissBtn").addEventListener("click", () => { clearTimeout(autoTimer); closeModal(); });
+  modal.querySelector(".kfl-close-x").addEventListener("click", () => { clearTimeout(autoTimer); closeModal(); });
+  backdrop.addEventListener("click", () => { clearTimeout(autoTimer); closeModal(); });
+  document.addEventListener("keydown", function escHandler(e) {
+    if (e.key === "Escape") { clearTimeout(autoTimer); closeModal(); document.removeEventListener("keydown", escHandler); }
+  });
 }
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -1326,7 +1363,11 @@ window.addEventListener("DOMContentLoaded", () => {
 function isPCIDepartment(dept) {
   if (!dept) return false;
   const d = dept.toUpperCase();
-  return d.includes("PCI") || d.includes("PHILIPS-CARBON") || d.includes("PHILIPS CARBON");
+  return (
+    d.includes("PCI") ||
+    d.includes("PHILIPS-CARBON") ||
+    d.includes("PHILIPS CARBON")
+  );
 }
 
 // ============================================================
@@ -1369,19 +1410,24 @@ async function exportToExcel() {
   ).padStart(2, "0")}`;
   const operator = window.currentOperator || "";
 
+  // Build a map of header label -> normalized key for break columns
+  const breakHeaderMap = {};
+  let breakInCount = 0, breakOutCount = 0;
+  headers.forEach((h) => {
+    if (/break in/i.test(h)) { breakInCount++; breakHeaderMap[h] = `BreakIn${breakInCount}`; }
+    else if (/break out/i.test(h)) { breakOutCount++; breakHeaderMap[h] = `BreakOut${breakOutCount}`; }
+  });
+
   rows.forEach((row, ri) => {
     if (ri === 0) return;
     const rowData = {};
     const cells = row.querySelectorAll("td");
     cells.forEach((cell, ci) => {
-      if (headers[ci] !== "Remarks") {
-        let v = cell.textContent;
-        if (headers[ci] === "Department")
-          v = v.replace(/^All Departments>/, "");
-        if (headers[ci] === "Noon Break In") rowData["BreakIn1"] = v;
-        else if (headers[ci] === "Noon Break Out") rowData["BreakOut1"] = v;
-        else rowData[headers[ci]] = v;
-      }
+      if (headers[ci] === "Remarks") return;
+      let v = cell.textContent.trim();
+      if (headers[ci] === "Department") v = v.replace(/^All Departments>/, "");
+      const key = breakHeaderMap[headers[ci]] || headers[ci];
+      rowData[key] = v;
     });
     results.push(rowData);
   });
@@ -1391,8 +1437,7 @@ async function exportToExcel() {
   wb.creator = "KFL Manpower Agency";
   wb.created = new Date();
 
-  const maxBreaks = window.maxBreaksFound || 2;
-  const lastColIndex = hasBreakColumns ? 6 + maxBreaks * 2 + 1 : 7;
+  const lastColIndex = hasBreakColumns ? 6 + (window.maxBreaksFound || 2) * 2 + 1 : 7;
 
   // ============================================================
   // Helper: duration string "13h 21m" → decimal hours
@@ -1829,32 +1874,46 @@ async function exportToExcel() {
   pivotSheet.getCell("A5").value = `Export Time: ${currentDate} ${currentTime}`;
   pivotSheet.getCell("A6").value = `Time Period: ${minDate} - ${maxDate}`;
 
+  const hasBreak = !!window.hasBreakRecords;
+  const maxBreaks = window.maxBreaksFound || 1;
+
   const employeeSummary = {};
   results.forEach((r) => {
     if (!employeeSummary[r.Employee]) {
+      const isSanteh = r.Department && r.Department.toUpperCase().includes("SANTEH");
       employeeSummary[r.Employee] = {
         records: [],
-        isSanteh: r.Department && r.Department.toUpperCase().includes("SANTEH"),
-        isKflStaff:
-          r.Department && r.Department.toUpperCase().includes("KFL-STAFF"),
+        department: r.Department,
+        isSanteh,
       };
     }
     const rd = { Date: r.Date };
     rd.CheckIn = r.CheckIn || r["Check In"] || "-";
     rd.CheckOut = r.CheckOut || r["Check Out"] || "-";
-    if (employeeSummary[r.Employee].isSanteh) {
-      for (let i = 1; i <= maxBreaks; i++) {
-        const ord =
-          i === 1 ? "1st" : i === 2 ? "2nd" : i === 3 ? "3rd" : `${i}th`;
-        rd[`BreakIn${i}`] = r[`BreakIn${i}`] || r[`${ord} Break In`] || "-";
-        rd[`BreakOut${i}`] = r[`BreakOut${i}`] || r[`${ord} Break Out`] || "-";
+    if (hasBreak) {
+      const isSanteh = employeeSummary[r.Employee].isSanteh;
+      const pairs = isSanteh ? maxBreaks : 1;
+      for (let i = 1; i <= pairs; i++) {
+        rd[`BreakIn${i}`] = r[`BreakIn${i}`] || "-";
+        rd[`BreakOut${i}`] = r[`BreakOut${i}`] || "-";
       }
-    } else if (employeeSummary[r.Employee].isKflStaff) {
-      rd.BreakIn1 = r.BreakIn1 || r["Noon Break In"] || "-";
-      rd.BreakOut1 = r.BreakOut1 || r["Noon Break Out"] || "-";
     }
     employeeSummary[r.Employee].records.push(rd);
   });
+
+  // Helper: generate all dates between two DD-MM-YYYY strings
+  function dateRange(startStr, endStr) {
+    const dates = [];
+    const s = parseDate(startStr);
+    const e = parseDate(endStr);
+    for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+      const dd = String(d.getDate()).padStart(2, "0");
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const yyyy = d.getFullYear();
+      dates.push(`${dd}-${mm}-${yyyy}`);
+    }
+    return dates;
+  }
 
   let pr = 8;
   Object.entries(employeeSummary).forEach(([emp, ed]) => {
@@ -1862,7 +1921,32 @@ async function exportToExcel() {
       (a, b) => parseDate(a.Date) - parseDate(b.Date),
     );
 
-    pivotSheet.mergeCells(pr, 1, pr, 7);
+    // Build a map of date -> record for quick lookup
+    const recByDate = {};
+    sorted.forEach((rec) => { recByDate[rec.Date] = rec; });
+
+    // Full date range including empty days
+    const allDates = sorted.length >= 2
+      ? dateRange(sorted[0].Date, sorted[sorted.length - 1].Date)
+      : sorted.map((r) => r.Date);
+
+    // Determine columns based on hasBreak + isSanteh
+    let hc = [];
+    if (hasBreak) {
+      const pairs = ed.isSanteh ? maxBreaks : 1;
+      hc = ["Date", "Check In"];
+      for (let i = 1; i <= pairs; i++) {
+        const ord = ed.isSanteh ? (i === 1 ? "1st" : i === 2 ? "2nd" : i === 3 ? "3rd" : `${i}th`) + " " : "";
+        hc.push(`${ord}Break In`, `${ord}Break Out`);
+      }
+      hc.push("Check Out");
+    } else {
+      hc = ["Date", "Check In", "Check Out"];
+    }
+
+    const totalCols = hc.length;
+
+    pivotSheet.mergeCells(pr, 1, pr, totalCols);
     const ec = pivotSheet.getCell(pr, 1);
     ec.value = emp;
     ec.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
@@ -1872,20 +1956,6 @@ async function exportToExcel() {
       fgColor: { argb: "FF4472C4" },
     };
     pr++;
-
-    let hc = [];
-    if (ed.isSanteh) {
-      hc = ["Date", "Check In"];
-      for (let i = 1; i <= maxBreaks; i++) {
-        const o = i === 1 ? "st" : i === 2 ? "nd" : i === 3 ? "rd" : "th";
-        hc.push(`${i}${o} Break In`, `${i}${o} Break Out`);
-      }
-      hc.push("Check Out");
-    } else if (ed.isKflStaff) {
-      hc = ["Date", "Check In", "Noon Break In", "Noon Break Out", "Check Out"];
-    } else {
-      hc = ["Date", "CheckIn", "CheckOut"];
-    }
 
     hc.forEach((h, i) => {
       const c = pivotSheet.getCell(pr, i + 1);
@@ -1906,28 +1976,19 @@ async function exportToExcel() {
     });
     pr++;
 
-    sorted.forEach((rec) => {
-      let dr = [];
-      if (ed.isSanteh) {
-        dr = [rec.Date, rec.CheckIn];
-        for (let i = 1; i <= maxBreaks; i++) {
-          dr.push(rec[`BreakIn${i}`] || "-", rec[`BreakOut${i}`] || "-");
+    allDates.forEach((dateStr) => {
+      const rec = recByDate[dateStr];
+      let dr = [dateStr, rec ? rec.CheckIn : ""];
+      if (hasBreak) {
+        const pairs = ed.isSanteh ? maxBreaks : 1;
+        for (let i = 1; i <= pairs; i++) {
+          dr.push(rec ? (rec[`BreakIn${i}`] || "") : "", rec ? (rec[`BreakOut${i}`] || "") : "");
         }
-        dr.push(rec.CheckOut);
-      } else if (ed.isKflStaff) {
-        dr = [
-          rec.Date,
-          rec.CheckIn,
-          rec.BreakIn1 || "-",
-          rec.BreakOut1 || "-",
-          rec.CheckOut,
-        ];
-      } else {
-        dr = [rec.Date, rec.CheckIn, rec.CheckOut];
       }
+      dr.push(rec ? rec.CheckOut : "");
       dr.forEach((v, i) => {
         const c = pivotSheet.getCell(pr, i + 1);
-        c.value = v;
+        c.value = v === "-" ? "" : v;
         c.alignment = { horizontal: "center", vertical: "middle" };
         c.border = {
           top: { style: "thin" },
@@ -1935,14 +1996,8 @@ async function exportToExcel() {
           left: { style: "thin" },
           right: { style: "thin" },
         };
-        // Highlight missing
-        if (v === "-") {
-          c.fill = {
-            type: "pattern",
-            pattern: "solid",
-            fgColor: { argb: "FFFFE5E5" },
-          };
-          c.font = { color: { argb: "FFC00000" }, bold: true };
+        if (i > 0 && !v) {
+          c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFCCCC" } };
         }
       });
       pr++;
@@ -1950,12 +2005,12 @@ async function exportToExcel() {
     pr++;
   });
 
-  pivotSheet.columns = Array(7).fill({ width: 15 });
+  pivotSheet.columns = Array(5 + maxBreaks * 2).fill({ width: 15 });
 
   // ============================================================
   // SHEET 3: Time-Logs (PCI / PHILIPS-CARBON flat format)
   // ============================================================
-  const pciRaw = (window.rawSwipeRecords || []);
+  const pciRaw = window.rawSwipeRecords || [];
   if (pciRaw.length > 0) {
     const pciSheet = wb.addWorksheet("Time-Logs", {
       properties: { tabColor: { argb: "FFED7D31" } },
@@ -1967,32 +2022,66 @@ async function exportToExcel() {
     ph.value = "PCI / PHILIPS-CARBON TIME LOGS";
     ph.font = { bold: true, size: 14, color: { argb: "FF1F4E78" } };
     ph.alignment = { horizontal: "center", vertical: "middle" };
-    ph.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFCE4D6" } };
+    ph.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFFCE4D6" },
+    };
 
     const pciHeaders = ["Employee ID", "Name", "Date & Time", "Time Logs Type"];
     pciHeaders.forEach((h, i) => {
       const c = pciSheet.getCell(2, i + 1);
       c.value = h;
       c.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
-      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFED7D31" } };
+      c.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFED7D31" },
+      };
       c.alignment = { horizontal: "center", vertical: "middle" };
-      c.border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
+      c.border = {
+        top: { style: "thin" },
+        bottom: { style: "thin" },
+        left: { style: "thin" },
+        right: { style: "thin" },
+      };
     });
 
-    pciRaw.sort((a, b) => a.name.localeCompare(b.name) || a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+    pciRaw.sort(
+      (a, b) =>
+        a.name.localeCompare(b.name) ||
+        a.date.localeCompare(b.date) ||
+        a.time.localeCompare(b.time),
+    );
 
     pciRaw.forEach((rec, ri) => {
       const vals = [rec.id, rec.name, `${rec.date} ${rec.time}`, rec.type];
       vals.forEach((v, ci) => {
         const c = pciSheet.getCell(ri + 3, ci + 1);
         c.value = v;
-        c.alignment = { horizontal: ci === 1 ? "left" : "center", vertical: "middle" };
-        c.border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
+        c.alignment = {
+          horizontal: ci === 1 ? "left" : "center",
+          vertical: "middle",
+        };
+        c.border = {
+          top: { style: "thin" },
+          bottom: { style: "thin" },
+          left: { style: "thin" },
+          right: { style: "thin" },
+        };
       });
     });
 
-    pciSheet.columns = [{ width: 15 }, { width: 30 }, { width: 22 }, { width: 18 }];
-    pciSheet.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 4 } };
+    pciSheet.columns = [
+      { width: 15 },
+      { width: 30 },
+      { width: 22 },
+      { width: 18 },
+    ];
+    pciSheet.autoFilter = {
+      from: { row: 2, column: 1 },
+      to: { row: 2, column: 4 },
+    };
   }
 
   // ============================================================
@@ -2039,20 +2128,8 @@ async function exportToExcel() {
   results.forEach((r) => {
     let vals = [];
     if (hasBreakColumns) {
-      const keys = [
-        "Employee",
-        "Department",
-        "Status",
-        "Duration",
-        "Date",
-        "CheckIn",
-      ];
-      if (headers.some((h) => h.includes("1st Break In"))) {
-        for (let i = 1; i <= maxBreaks; i++)
-          keys.push(`BreakIn${i}`, `BreakOut${i}`);
-      } else {
-        keys.push("BreakIn1", "BreakOut1");
-      }
+      const keys = ["Employee", "Department", "Status", "Duration", "Date", "CheckIn"];
+      for (let i = 1; i <= maxBreaks; i++) keys.push(`BreakIn${i}`, `BreakOut${i}`);
       keys.push("CheckOut");
       vals = keys.map((k) => r[k] || "-");
     } else {
@@ -2178,15 +2255,22 @@ async function exportToPDF() {
     );
     const rows = Array.from(table.querySelectorAll("tr")).slice(1);
 
+    // Build a map of header label -> normalized key for break columns
+    const breakHeaderMap = {};
+    let breakInCount = 0, breakOutCount = 0;
+    headers.forEach((h) => {
+      if (/break in/i.test(h)) { breakInCount++; breakHeaderMap[h] = `BreakIn${breakInCount}`; }
+      else if (/break out/i.test(h)) { breakOutCount++; breakHeaderMap[h] = `BreakOut${breakOutCount}`; }
+    });
+
     const results = rows.map((row) => {
       const cells = Array.from(row.querySelectorAll("td")).map((td) =>
         td.textContent.trim(),
       );
       const obj = {};
       headers.forEach((h, i) => {
-        if (h === "Noon Break In") obj["BreakIn1"] = cells[i];
-        else if (h === "Noon Break Out") obj["BreakOut1"] = cells[i];
-        else obj[h] = cells[i];
+        const key = breakHeaderMap[h] || h;
+        obj[key] = cells[i];
       });
       return obj;
     });
@@ -2212,8 +2296,6 @@ async function exportToPDF() {
       now.getMinutes(),
     ).padStart(2, "0")}`;
     const operator = window.currentOperator || "";
-
-    const maxBreaks = window.maxBreaksFound || 2;
 
     // ---------- Create PDF ----------
     const { jsPDF } = window.jspdf;
@@ -2415,28 +2497,30 @@ async function exportToPDF() {
     yPos = drawBanner("Attendance Pivot");
 
     // Group results per employee
+    const hasBreak = !!window.hasBreakRecords;
+    const maxBreaks = window.maxBreaksFound || 1;
     const employeeSummary = {};
     results.forEach((r) => {
       if (!employeeSummary[r.Employee]) {
+        const isSanteh = r.Department && r.Department.toUpperCase().includes("SANTEH");
         employeeSummary[r.Employee] = {
           records: [],
           department: r.Department,
-          isSanteh:
-            r.Department && r.Department.toUpperCase().includes("SANTEH"),
-          isKflStaff:
-            r.Department && r.Department.toUpperCase().includes("KFL-STAFF"),
+          isSanteh,
         };
       }
       const record = {
         Date: r.Date,
         CheckIn: r.CheckIn || r["Check In"] || "-",
         CheckOut: r.CheckOut || r["Check Out"] || "-",
-        BreakIn1: r.BreakIn1 || r["Noon Break In"] || "-",
-        BreakOut1: r.BreakOut1 || r["Noon Break Out"] || "-",
       };
-      for (let i = 1; i <= maxBreaks; i++) {
-        record[`BreakIn${i}`] = r[`BreakIn${i}`] || "-";
-        record[`BreakOut${i}`] = r[`BreakOut${i}`] || "-";
+      if (hasBreak) {
+        const isSanteh = employeeSummary[r.Employee].isSanteh;
+        const pairs = isSanteh ? maxBreaks : 1;
+        for (let i = 1; i <= pairs; i++) {
+          record[`BreakIn${i}`] = r[`BreakIn${i}`] || "-";
+          record[`BreakOut${i}`] = r[`BreakOut${i}`] || "-";
+        }
       }
       employeeSummary[r.Employee].records.push(record);
     });
@@ -2451,45 +2535,21 @@ async function exportToPDF() {
         (a, b) => parseDate(a.Date) - parseDate(b.Date),
       );
 
-      let subHeaders;
-      if (empData.isSanteh) {
-        subHeaders = ["Date", "Check In"];
-        for (let i = 1; i <= maxBreaks; i++) {
-          const ord = i === 1 ? "st" : i === 2 ? "nd" : i === 3 ? "rd" : "th";
-          subHeaders.push(`${i}${ord} Break In`, `${i}${ord} Break Out`);
-        }
-        subHeaders.push("Check Out");
-      } else if (empData.isKflStaff) {
-        subHeaders = [
-          "Date",
-          "Check In",
-          "Noon Break In",
-          "Noon Break Out",
-          "Check Out",
-        ];
-      } else {
-        subHeaders = ["Date", "CheckIn", "CheckOut"];
+      const pairs = hasBreak ? (empData.isSanteh ? maxBreaks : 1) : 0;
+      const subHeaders = ["Date", "Check In"];
+      for (let i = 1; i <= pairs; i++) {
+        const ord = empData.isSanteh ? (i === 1 ? "1st" : i === 2 ? "2nd" : i === 3 ? "3rd" : `${i}th`) + " " : "";
+        subHeaders.push(`${ord}Break In`, `${ord}Break Out`);
       }
+      subHeaders.push("Check Out");
 
       const bodyRows = sortedRecords.map((rec) => {
-        if (empData.isSanteh) {
-          const row = [rec.Date, rec.CheckIn];
-          for (let i = 1; i <= maxBreaks; i++) {
-            row.push(rec[`BreakIn${i}`] || "-", rec[`BreakOut${i}`] || "-");
-          }
-          row.push(rec.CheckOut);
-          return row;
-        } else if (empData.isKflStaff) {
-          return [
-            rec.Date,
-            rec.CheckIn,
-            rec.BreakIn1 || "-",
-            rec.BreakOut1 || "-",
-            rec.CheckOut,
-          ];
-        } else {
-          return [rec.Date, rec.CheckIn, rec.CheckOut];
+        const row = [rec.Date, rec.CheckIn];
+        for (let i = 1; i <= pairs; i++) {
+          row.push(rec[`BreakIn${i}`] || "-", rec[`BreakOut${i}`] || "-");
         }
+        row.push(rec.CheckOut);
+        return row;
       });
 
       // Estimate block height: employee bar + head + rows
@@ -2584,16 +2644,26 @@ async function exportToPDF() {
     // ============================================================
     // PCI / PHILIPS-CARBON TIME LOGS PAGE
     // ============================================================
-    const pciRaw = (window.rawSwipeRecords || []);
+    const pciRaw = window.rawSwipeRecords || [];
     if (pciRaw.length > 0) {
       doc.addPage("a4", "landscape");
       yPos = drawBanner("PCI / PHILIPS-CARBON Time Logs");
 
-      const pciSorted = [...pciRaw].sort((a, b) => a.name.localeCompare(b.name) || a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+      const pciSorted = [...pciRaw].sort(
+        (a, b) =>
+          a.name.localeCompare(b.name) ||
+          a.date.localeCompare(b.date) ||
+          a.time.localeCompare(b.time),
+      );
 
       doc.autoTable({
         head: [["Employee ID", "Name", "Date & Time", "Time Logs Type"]],
-        body: pciSorted.map(r => [r.id, r.name, `${r.date} ${r.time}`, r.type]),
+        body: pciSorted.map((r) => [
+          r.id,
+          r.name,
+          `${r.date} ${r.time}`,
+          r.type,
+        ]),
         startY: yPos,
         margin: { left: margin, right: margin },
         theme: "grid",
@@ -2620,11 +2690,13 @@ async function exportToPDF() {
           3: { halign: "center" },
         },
         alternateRowStyles: { fillColor: [255, 243, 235] },
-        didParseCell: function(data) {
+        didParseCell: function (data) {
           if (data.section === "body" && data.column.index === 3) {
             const v = String(data.cell.raw || "").toLowerCase();
-            if (v.includes("check in")) data.cell.styles.textColor = COLORS.dayGreen;
-            else if (v.includes("check out")) data.cell.styles.textColor = COLORS.missingRed;
+            if (v.includes("check in"))
+              data.cell.styles.textColor = COLORS.dayGreen;
+            else if (v.includes("check out"))
+              data.cell.styles.textColor = COLORS.missingRed;
           }
         },
       });
