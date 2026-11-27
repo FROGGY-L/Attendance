@@ -2188,7 +2188,49 @@ async function exportToExcel() {
   };
 
   // ============================================================
-  // SHEET 4: Original Data
+  // SHEET 4: PEPSI Template
+  // ============================================================
+  const pepsiResults = results.filter(r => r.Department && r.Department.toUpperCase().includes("PEPSI"));
+  if (pepsiResults.length > 0) {
+    const pepsiSheet = wb.addWorksheet("Pepsi Template", {
+      properties: { tabColor: { argb: "FF0070C0" } },
+      views: [{ state: "frozen", ySplit: 1 }],
+    });
+
+    const pepsiHeaders = ["Employee", "Date", "Location", "Cost Center", "Employee Category", "Employee Group", "Day", "Category", "AM In", "AM Out"];
+    pepsiHeaders.forEach((h, i) => {
+      const c = pepsiSheet.getCell(1, i + 1);
+      c.value = h;
+      c.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0070C0" } };
+      c.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+      c.border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
+    });
+
+    pepsiResults.forEach((r, ri) => {
+      const dateVal = r.Date || "";
+      // Employee Group (col 6) = empty, Day (col 7) = date
+      const amIn = r.CheckIn || r["Check In"] || "";
+      const amOut = r.CheckOut || r["Check Out"] || "";
+      const vals = [r.Employee, dateVal, "", "", "", "", dateVal, "", amIn, amOut];
+      vals.forEach((v, ci) => {
+        const c = pepsiSheet.getCell(ri + 2, ci + 1);
+        c.value = v;
+        c.alignment = { horizontal: ci === 0 ? "left" : "center", vertical: "middle" };
+        c.border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
+      });
+    });
+
+    pepsiSheet.columns = [
+      { width: 28 }, { width: 14 }, { width: 16 }, { width: 14 },
+      { width: 20 }, { width: 18 }, { width: 14 }, { width: 14 },
+      { width: 12 }, { width: 12 },
+    ];
+    pepsiSheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 10 } };
+  }
+
+  // ============================================================
+  // SHEET 5: Original Data
   // ============================================================
   if (window.originalWorksheet) {
     const os = wb.addWorksheet("Original Data", {
